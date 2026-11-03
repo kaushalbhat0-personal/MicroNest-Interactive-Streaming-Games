@@ -29,10 +29,13 @@ import {
   paleChartModel,
   recapModel,
   resolveModel,
+  runtimeStatusModel,
   threatModel,
   vexModel,
   voteModel,
   worldRemembers,
+  youtubeDisplayModel,
+  type InputSource,
 } from "./presentation/tidebound-presentation";
 import { renderOverlay } from "./presentation/hud";
 
@@ -412,12 +415,12 @@ function wirePanel(rt: Runtime, refreshPanel: () => void): void {
   ($("btn-rite-rho") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("rho-plain-speech"));
   ($("btn-pause") as HTMLButtonElement).onclick = () => {
     rt.pause();
-    flashOutcome("paused — incoming events held");
+    flashOutcome("runtime paused — incoming events held");
     refreshPanel();
   };
   ($("btn-resume") as HTMLButtonElement).onclick = () => {
     rt.resume();
-    flashOutcome("resumed");
+    flashOutcome("runtime resumed — events flowing");
     refreshPanel();
   };
   ($("btn-save") as HTMLButtonElement).onclick = () => void rt.save();
@@ -516,7 +519,13 @@ export function renderPanelState(rt: Runtime): void {
   const vote = voteModel(rt.session, w, TIDEBOUND_LIBRARY);
   const recap = recapModel(w);
 
-  set("cc-status", rt.paused ? "PAUSED — events held" : "LIVE");
+  // 5G-8B: runtime and YouTube are two separate facts. The top-level pill
+  // reports ONLY event processing (never the broadcast); the Input Source
+  // card reports ONLY the chat connection (never the runtime).
+  const rs = runtimeStatusModel(rt.paused);
+  set("cc-status", rs.label);
+  const statusEl = document.getElementById("cc-status");
+  if (statusEl) statusEl.classList.toggle("paused", rt.paused);
   set("cc-arc", `${h.arcLabel}`);
   set("cc-chapter", `${h.chapterLabel} · ${h.streamLabel}`);
   set("cc-threat", `Threat ${threat.level}/100 — ${threat.text}`);
@@ -581,12 +590,21 @@ export function renderPanelState(rt: Runtime): void {
   }
 
   // YouTube source state (elements exist only on the creator page).
+  // Displayed state/note come from youtubeDisplayModel: a pure projection
+  // of the selected input source + the sidecar's own status. The pill keeps
+  // the raw wire status in data-s for quiet tone styling; the words never
+  // claim more than the adapter actually knows (fail closed).
   const ytStatus = document.getElementById("yt-status");
   if (ytStatus) {
     const s = rt.yt.lastStatus;
     const d = rt.yt.diag;
-    ytStatus.textContent = s.status;
+    const srcYt = document.getElementById("src-yt") as HTMLInputElement | null;
+    const source: InputSource = srcYt?.checked ? "youtube" : "simulation";
+    const model = youtubeDisplayModel(source, s);
+    ytStatus.textContent = model.state;
     ytStatus.setAttribute("data-s", s.status);
+    const note = document.getElementById("yt-note");
+    if (note) note.textContent = model.note;
     const detail = document.getElementById("yt-detail");
     if (detail) {
       detail.textContent =

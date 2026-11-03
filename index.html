@@ -65,7 +65,12 @@
       #yt-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: #2b2542; }
       #yt-status[data-s="STREAMING"] { background: #1d5c3f; color: #b7f7c9; }
       #yt-status[data-s="RECONNECTING"], #yt-status[data-s="CONNECTING"], #yt-status[data-s="LIVE_CHAT_FOUND"] { background: #6b4e12; color: var(--tb-gold); }
-      #yt-status[data-s="ERROR"], #yt-status[data-s="AUTH_REQUIRED"] { background: #6b1d1d; color: var(--tb-rose); }
+      #yt-status[data-s="AUTH_REQUIRED"] { background: #6b4e12; color: var(--tb-gold); }
+      #yt-status[data-s="ERROR"] { background: #6b1d1d; color: var(--tb-rose); }
+      #yt-status[data-s="CONNECTED"], #yt-status[data-s="STREAM_ENDED"] { background: #2b2542; color: var(--tb-dim); }
+      .yt-block { margin: 8px 0; padding-top: 8px; border-top: 1px solid var(--tb-hairline); }
+      .yt-label { font-size: 12px; font-weight: 700; color: var(--tb-dim); margin-bottom: 4px; }
+      #yt-note { margin-top: 4px; }
       .src-toggle { display: flex; gap: 12px; margin: 4px 0 8px; font-weight: 700; }
       .src-toggle label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
       .meterbar { height: 8px; border-radius: 5px; background: rgba(0,0,0,.55); overflow: hidden; margin: 6px 0; }
@@ -89,12 +94,12 @@
     <header>
       <div>
         <h1>Tidebound — keeper console</h1>
-        <p>Live stream controls. The OBS overlay (<code>/overlay.html</code>) shows the game to viewers.</p>
+        <p>Runtime controls for the live show. The OBS overlay (<code>/overlay.html</code>) shows the game to viewers.</p>
       </div>
       <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <span id="cc-status" role="status">LIVE</span>
-        <button class="ghost" id="btn-pause" style="width:auto">Pause</button>
-        <button class="primary" id="btn-resume" style="width:auto">Resume</button>
+        <span id="cc-status" role="status" aria-label="Tidebound runtime status">Runtime · Running</span>
+        <button class="ghost" id="btn-pause" style="width:auto">Pause runtime</button>
+        <button class="primary" id="btn-resume" style="width:auto">Resume runtime</button>
       </div>
     </header>
     <main>
@@ -105,14 +110,14 @@
           <pre class="log" id="story-log"></pre>
         </div>
         <div class="card">
-          <h2>Live feed (batched)</h2>
+          <h2>Event feed (batched)</h2>
           <pre class="log" id="feed-list"></pre>
         </div>
       </section>
       <aside>
         <div class="cc-group" role="presentation">Now — world and story moment <span class="cc-why">· what is happening</span></div>
         <div class="card" aria-live="polite">
-          <h2>Live state</h2>
+          <h2>World state</h2>
           <div class="big" id="cc-arc">—</div>
           <div class="dim" id="cc-chapter">—</div>
           <div class="stat-row"><span id="cc-threat">—</span><span id="cc-resolve">—</span><span id="cc-supplies">—</span></div>
@@ -237,7 +242,11 @@
             <label><input type="radio" name="src" id="src-sim" checked /> Simulation</label>
             <label><input type="radio" name="src" id="src-yt" /> YouTube Live</label>
           </div>
-          <div>Status: <span id="yt-status" data-s="off">off</span></div>
+          <div class="yt-block">
+            <div class="yt-label">YouTube Live</div>
+            <div><span id="yt-status" data-s="off" role="status">Not connected</span></div>
+            <div class="dim" id="yt-note">Simulation is driving the world. Select YouTube Live above to connect chat.</div>
+          </div>
           <pre class="log" id="yt-detail" style="max-height:110px">(start the youtube sidecar, then switch to YouTube Live)</pre>
           <button class="ghost" id="btn-yt-auth">1 · Authorize with Google</button>
           <button class="primary" id="btn-yt-connect">2 · Connect to live chat</button>

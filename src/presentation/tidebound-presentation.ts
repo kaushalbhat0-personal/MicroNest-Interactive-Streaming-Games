@@ -441,6 +441,105 @@ export function recapModel(world: WorldState): RecapModel {
 }
 
 // ---------------------------------------------------------------------------
+// Runtime vs input-source status (5G-8B: creator-UX only, read-only).
+//
+// The console must never conflate "the game is processing events" with
+// "YouTube chat is connected". Both projections below are pure functions
+// of already-existing state (the runtime paused flag, the selected input
+// source, the sidecar's own YtStatus) — no new domain state, no behavior.
+// ---------------------------------------------------------------------------
+
+/** Which chat source the creator selected in the console (radio state). */
+export type InputSource = "simulation" | "youtube";
+
+export interface RuntimeStatusModel {
+  paused: boolean;
+  /** "Runtime · Running" or "Runtime · Paused — events held". Never "LIVE". */
+  label: string;
+}
+
+export function runtimeStatusModel(paused: boolean): RuntimeStatusModel {
+  return paused
+    ? { paused: true, label: "Runtime · Paused — events held" }
+    : { paused: false, label: "Runtime · Running" };
+}
+
+/** Wire shape of the YouTube sidecar status (see src/youtube/client.ts). */
+export interface YouTubeStatusLike {
+  status: string;
+  error?: string | null;
+  broadcastTitle?: string | null;
+  reconnects?: number;
+}
+
+export interface YouTubeDisplayModel {
+  /** Short state: Not connected / Connecting… / Connected / Receiving chat … */
+  state: string;
+  /** One human sentence: what it means and what to do next, if anything. */
+  note: string;
+}
+
+/**
+ * Fail-closed display mapping. Stronger claims require stronger states:
+ * authorization alone never reads as connected, and only the sidecar's own
+ * STREAMING state (chat messages actually fetched) reads as receiving.
+ * Platform ids (liveChatId, cursors) never appear in state or note.
+ */
+export function youtubeDisplayModel(source: InputSource, s: YouTubeStatusLike): YouTubeDisplayModel {
+  if (source === "simulation") {
+    return {
+      state: "Not connected",
+      note: "Simulation is driving the world. Select YouTube Live above to connect chat.",
+    };
+  }
+  switch (s.status) {
+    case "off":
+      return { state: "Not connected", note: "YouTube Live selected — starting the connection…" };
+    case "DISCONNECTED":
+      return s.error === "sidecar-unreachable"
+        ? { state: "Disconnected", note: "Sidecar unreachable — start the youtube sidecar, then connect." }
+        : { state: "Disconnected", note: "Not connected to the sidecar." };
+    case "AUTH_REQUIRED":
+      return { state: "Needs authorization", note: "Authorize with Google first (step 1), then connect to live chat." };
+    case "CONNECTING":
+      return { state: "Connecting…", note: "Reaching the sidecar…" };
+    case "RECONNECTING":
+      return {
+        state: "Reconnecting…",
+        note:
+          typeof s.reconnects === "number"
+            ? `Attempt ${s.reconnects} — holding the last position.`
+            : "Holding the last position.",
+      };
+    case "CONNECTED":
+      return {
+        state: "Connected",
+        note: "Sidecar connected — no live chat found yet. Start the broadcast, then connect.",
+      };
+    case "LIVE_CHAT_FOUND":
+      return {
+        state: "Live chat found",
+        note: s.broadcastTitle
+          ? `Chat located for "${s.broadcastTitle}". Waiting for messages…`
+          : "Chat located. Waiting for messages…",
+      };
+    case "STREAMING":
+      return {
+        state: "Receiving chat",
+        note: s.broadcastTitle
+          ? `Live: "${s.broadcastTitle}". Chat commands are reaching the world.`
+          : "Chat commands are reaching the world.",
+      };
+    case "STREAM_ENDED":
+      return { state: "Stream ended", note: "The broadcast ended. Disconnect, or wait for the next live chat." };
+    case "ERROR":
+      return { state: "Error", note: s.error ? `Sidecar reports: ${s.error}.` : "Sidecar reports an error." };
+    default:
+      return { state: "Not connected", note: "Unknown connection state — treating as disconnected." };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Command guide (canonical vocabulary only; legacy verbs never appear)
 // ---------------------------------------------------------------------------
 
