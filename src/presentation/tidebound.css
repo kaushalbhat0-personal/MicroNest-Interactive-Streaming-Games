@@ -1,0 +1,252 @@
+/* Phase 5G-8A — Tidebound visual system. Lightweight, no frameworks.
+   Hierarchy: 1 story moment · 2 assembly vote (when called) · 3 audience
+   action → consequence · 4 world state · 5 memory. The HUD recedes so the
+   Phaser sea carries the world; the DOM carries story comprehension.
+   Lantern-lit siege: salt, wood, iron, parchment, lantern light, dark sea.
+   Quiet chrome, one gold accent, neutral depth (no colored glow). */
+
+:root {
+  --tb-ink: #f4efe4;
+  --tb-dim: #b9b3c7;
+  --tb-faint: #8d89a0;
+  --tb-gold: #ffd166;
+  --tb-gold-deep: #c99b3f;
+  --tb-teal: #90e0ef;
+  --tb-rose: #ff8fa3;
+  --tb-red: #e63946;
+  --tb-green: #90be6d;
+  --tb-panel: rgba(10, 6, 24, 0.78);
+  --tb-panel-quiet: rgba(10, 6, 24, 0.6);
+  --tb-line: rgba(185, 179, 199, 0.22);
+  --tb-line-strong: #3d2b63;
+}
+
+.tb-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--tb-ink);
+}
+
+.tb-hud .tb-panel {
+  background: var(--tb-panel);
+  border: 1px solid var(--tb-line);
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  padding: 12px 16px;
+}
+
+/* ---- World eyebrow: deliberately quiet (level 4), the story leads ---- */
+.tb-topbar {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  min-width: 480px;
+  padding: 8px 20px;
+  background: var(--tb-panel-quiet);
+}
+.tb-topbar .tb-world {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--tb-gold);
+}
+.tb-topbar .tb-arc { font-size: 14px; letter-spacing: 0.1em; color: var(--tb-ink); }
+.tb-topbar .tb-chapter { font-size: 13px; letter-spacing: 0.08em; color: var(--tb-teal); }
+.tb-topbar .tb-stream {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--tb-dim);
+  border: 1px solid var(--tb-line);
+  border-radius: 20px;
+  padding: 2px 12px;
+}
+
+.tb-left {
+  position: absolute;
+  left: 24px;
+  top: 164px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tb-right {
+  position: absolute;
+  right: 24px;
+  top: 164px;
+  width: 384px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 776px;
+  overflow: hidden;
+}
+.tb-bottom {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 14px;
+  max-width: 1240px;
+}
+
+.tb-kicker {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--tb-dim);
+  margin-bottom: 6px;
+}
+
+/* ---- Level 1 — story now: the strongest surface on screen ---- */
+.tb-story {
+  border-left: 3px solid var(--tb-gold);
+}
+.tb-moment { font-size: 26px; line-height: 1.35; color: #fff3d6; }
+.tb-next { font-size: 15px; color: var(--tb-gold); margin-top: 8px; }
+.tb-next .tb-next-label { color: var(--tb-dim); }
+
+.tb-stat { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 4px 0; }
+.tb-stat .tb-n { font-variant-numeric: tabular-nums; }
+.tb-bar { flex: 1; height: 8px; border-radius: 5px; background: rgba(0, 0, 0, 0.55); overflow: hidden; }
+.tb-bar > i { display: block; height: 100%; border-radius: 5px; }
+.tb-threat-calm { background: #43aa8b; }
+.tb-threat-stirring { background: #f4a261; }
+.tb-threat-pressing { background: #e76f51; }
+.tb-threat-dire { background: var(--tb-red); }
+.tb-resolve-fill { background: var(--tb-teal); }
+.tb-supply-fill { background: var(--tb-gold); }
+
+.tb-loc { font-size: 14px; margin: 3px 0; }
+.tb-loc .glyph-sound { color: var(--tb-green); }
+.tb-loc .glyph-strained { color: var(--tb-gold); }
+.tb-loc .glyph-lost { color: var(--tb-rose); }
+.tb-loc-lost { color: var(--tb-rose); font-weight: 700; }
+.tb-loc-strained { color: var(--tb-gold); }
+
+/* ---- Level 2 — assembly: the strongest temporary focal point ---- */
+.tb-vote { border-color: var(--tb-line-strong); }
+.tb-vote.open { border-color: var(--tb-gold); }
+.tb-vote.closed { border-color: var(--tb-line-strong); }
+.tb-vote.dormant { opacity: 0.85; background: var(--tb-panel-quiet); }
+.tb-vote h3, .tb-meter h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.14em; color: var(--tb-gold); }
+.tb-vote .tb-decide { font-size: 12px; color: var(--tb-dim); margin-bottom: 2px; }
+.tb-vote .tb-prompt { font-size: 24px; line-height: 1.3; font-weight: 700; }
+.tb-vote .tb-opt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 17px;
+  margin: 6px 0;
+  padding: 4px 0;
+  border-top: 1px solid var(--tb-line);
+}
+.tb-vote .tb-opt .tb-optkey {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  line-height: 28px;
+  text-align: center;
+  border: 1px solid var(--tb-line-strong);
+  border-radius: 8px;
+  color: var(--tb-dim);
+  font-size: 14px;
+  font-weight: 700;
+}
+.tb-vote .tb-opt.leading .tb-optkey { border-color: var(--tb-gold); color: var(--tb-gold); }
+.tb-vote .tb-opt .lbl { flex: 1 1 auto; }
+.tb-vote .tb-opt.leading .lbl { color: var(--tb-gold); font-weight: 700; }
+.tb-vote .tb-opt .cmd { color: var(--tb-teal); font-weight: 700; white-space: nowrap; font-size: 15px; }
+.tb-vote .tb-opt .n { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 32px; text-align: right; }
+.tb-vote .tb-lead {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--tb-gold);
+  border: 1px solid var(--tb-gold-deep);
+  border-radius: 6px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.tb-vote .tb-clock { height: 8px; border-radius: 5px; background: rgba(0,0,0,.55); overflow: hidden; margin-top: 8px; }
+.tb-vote .tb-clock > i { display: block; height: 100%; background: var(--tb-gold); }
+.tb-vote .tb-tally { font-size: 14px; color: var(--tb-dim); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.tb-vote .tb-soon { color: var(--tb-rose); font-size: 13px; font-weight: 700; }
+.tb-vote .tb-verdict {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tb-line);
+  font-size: 16px;
+}
+.tb-vote .tb-winner { color: var(--tb-gold); font-weight: 700; }
+
+/* ---- Level 3 — meters: collective progress toward something ---- */
+.tb-meter .tb-mrow { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+.tb-meter .tb-mrow .tb-n { font-variant-numeric: tabular-nums; }
+.tb-meter .tb-status { font-size: 12px; color: var(--tb-dim); }
+.tb-meter .tb-bar { height: 8px; margin: 6px 0; }
+.tb-meter .tb-fill-chart { background: var(--tb-teal); }
+.tb-meter .tb-fill-oil { background: var(--tb-gold); }
+.tb-meter.dormant { opacity: 0.55; background: var(--tb-panel-quiet); }
+.tb-meter.complete { border-color: var(--tb-green); }
+.tb-meter .tb-hint { font-size: 13px; color: var(--tb-dim); }
+
+/* ---- Level 3b — action becomes consequence ---- */
+.tb-feed .tb-item { font-size: 14px; margin: 3px 0; }
+.tb-feed .tb-kind { font-size: 11px; letter-spacing: 0.12em; font-weight: 700; margin-right: 6px; }
+.tb-kind-action { color: var(--tb-dim); }
+.tb-kind-consequence { color: var(--tb-teal); }
+.tb-kind-moment { color: var(--tb-gold); }
+.tb-catalyst { font-size: 14px; color: var(--tb-gold); font-weight: 700; }
+
+/* ---- Level 4 — memory: the signature, quiet and persistent ---- */
+.tb-deeds .tb-deed { font-size: 13.5px; margin: 4px 0; color: var(--tb-ink); }
+.tb-deeds .tb-deed::before { content: "✦ "; color: var(--tb-gold); }
+.tb-recap { font-size: 13.5px; color: var(--tb-dim); }
+.tb-recap strong { color: var(--tb-ink); }
+
+.tb-vex { border-color: var(--tb-red); text-align: center; font-size: 16px; font-weight: 700; color: var(--tb-rose); }
+.tb-vex.driven { border-color: var(--tb-green); color: var(--tb-green); }
+.tb-paused {
+  position: absolute; top: 104px; left: 50%; transform: translateX(-50%);
+  font-size: 16px; font-weight: 700; letter-spacing: 0.2em; color: #0d0a1a;
+  background: var(--tb-gold); border-radius: 8px; padding: 6px 22px;
+}
+
+/* ---- Level 2b — what the audience can do, grouped by meaning ---- */
+.tb-commands { display: flex; flex-direction: column; gap: 4px; }
+.tb-cmdgroup { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 14px; }
+.tb-cmdgroup .tb-grouplabel { font-size: 11px; letter-spacing: 0.14em; color: var(--tb-dim); min-width: 64px; }
+.tb-cmdgroup b { color: var(--tb-teal); font-variant-numeric: tabular-nums; }
+.tb-cmdgroup span { color: var(--tb-dim); }
+.tb-cmdhelp { font-size: 12px; color: var(--tb-faint); text-align: center; }
+
+.tb-hud :is(a, button, [tabindex]):focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tb-hud * { animation: none !important; transition: none !important; }
+}
+
+/* ---- Creator console (index.html) reuses the same tokens ---- */
+.tb-creator { background: #0d0a1a; color: var(--tb-ink); font: 14px/1.45 system-ui, sans-serif; }
+.tb-creator header { padding: 12px 20px; background: #1a1033; border-bottom: 1px solid var(--tb-line); }
+.tb-creator main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 430px); gap: 12px; padding: 12px; }
+.tb-creator .card { background: #171228; border: 1px solid var(--tb-line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.tb-creator .card h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.14em; color: var(--tb-teal); text-transform: uppercase; }
+.tb-creator button { min-height: 44px; font-size: 15px; }
+.tb-creator button:focus-visible, .tb-creator input:focus-visible, .tb-creator select:focus-visible {
+  outline: 3px solid var(--tb-gold); outline-offset: 2px;
+}
+.tb-creator .btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tb-creator .btn-row button { flex: 1 1 140px; }
+.tb-creator .btn-danger { background: transparent; border: 2px solid var(--tb-red); color: var(--tb-rose); border-radius: 6px; font-weight: 800; }
+.tb-creator .btn-primary { background: var(--tb-gold); color: #231a06; border: 0; border-radius: 6px; font-weight: 800; }
+.tb-creator .btn-ghost { background: #2b2542; color: var(--tb-ink); border: 0; border-radius: 6px; font-weight: 700; }
+@media (max-width: 900px) {
+  .tb-creator main { grid-template-columns: 1fr; }
+  #game canvas { width: 100% !important; height: auto !important; }
+}

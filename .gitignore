@@ -1,0 +1,9 @@
+node_modules/
+dist/
+# Local runtime state (world saves, chat cursor). Secrets are NOT here:
+# OAuth client JSON + tokens live in ~/.emberkeep (outside the repo).
+data/*.json
+!data/.gitkeep
+# Local env overrides.
+.env
+.env.local

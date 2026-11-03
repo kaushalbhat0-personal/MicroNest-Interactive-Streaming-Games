@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tidebound — Overlay</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 1920px; height: 1080px; overflow: hidden; background: transparent; }
+      #stage { position: relative; width: 1920px; height: 1080px; }
+      #game { position: absolute; inset: 0; width: 1920px; height: 1080px; }
+      #game canvas { width: 1920px !important; height: 1080px !important; }
+      #hud { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; }
+    </style>
+  </head>
+  <body>
+    <div id="stage" role="img" aria-label="Tidebound living story overlay">
+      <div id="game"></div>
+      <div id="hud" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/src/overlay.ts"></script>
+  </body>
+</html>

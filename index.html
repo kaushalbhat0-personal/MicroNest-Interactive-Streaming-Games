@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tidebound — Keeper Console</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --tb-ink: #f4efe4;
+        --tb-dim: #b9b3c7;
+        --tb-faint: #8d89a0;
+        --tb-gold: #ffd166;
+        --tb-gold-deep: #c99b3f;
+        --tb-teal: #90e0ef;
+        --tb-rose: #ff8fa3;
+        --tb-red: #e63946;
+        --tb-green: #90be6d;
+        --tb-line: #3d2b63;
+        --tb-hairline: rgba(185, 179, 199, 0.22);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: #0d0a1a; color: var(--tb-ink); font: 15px/1.5 system-ui, sans-serif; }
+      header { padding: 12px 20px; background: #1a1033; border-bottom: 1px solid var(--tb-line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+      header h1 { margin: 0; font-size: 20px; font-weight: 700; color: var(--tb-gold); }
+      header p { margin: 2px 0 0; color: var(--tb-dim); font-size: 13px; }
+      #cc-status { display: inline-block; padding: 6px 16px; border-radius: 20px; font-weight: 700; background: #1d5c3f; color: #b7f7c9; min-height: 44px; line-height: 32px; font-size: 14px; }
+      #cc-status.paused { background: #6b4e12; color: var(--tb-gold); }
+      main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; }
+      #game canvas { width: 100% !important; height: auto !important; border: 1px solid var(--tb-line); border-radius: 12px; }
+      /* Operation groups: NOW · KEEPER ACTIONS · WORLD MEMORY · AUDIENCE · SYSTEM */
+      .cc-group { margin: 20px 0 8px; padding-top: 12px; border-top: 1px solid var(--tb-hairline); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--tb-dim); }
+      .cc-group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+      .cc-group .cc-why { font-weight: 400; color: var(--tb-faint); letter-spacing: 0; }
+      .card { background: #171228; border: 1px solid var(--tb-line); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+      .card h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.08em; color: var(--tb-teal); }
+      .card .big { font-size: 19px; font-weight: 700; color: var(--tb-gold); line-height: 1.35; }
+      .card .dim { color: var(--tb-dim); font-size: 13px; }
+      .stat-row { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+      label { display: block; margin: 8px 0 2px; color: var(--tb-dim); font-size: 12px; }
+      input, select { width: 100%; padding: 10px 9px; border-radius: 8px; border: 1px solid var(--tb-line); background: #0d0a1a; color: var(--tb-ink); font-size: 15px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+      .btn-row button { flex: 1 1 140px; }
+      button { cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 700; margin-top: 8px; min-height: 44px; font-size: 15px; transition: background-color 120ms ease, border-color 120ms ease; }
+      button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      button:hover { filter: brightness(1.08); }
+      .primary { background: var(--tb-gold); color: #231a06; width: 100%; }
+      .paid { background: var(--tb-red); color: #fff; width: 100%; }
+      .ghost { background: #2b2542; color: var(--tb-ink); width: 100%; }
+      .danger { background: transparent; border: 2px solid var(--tb-red); color: var(--tb-rose); width: 100%; }
+      .vote-prompt { font-size: 18px; font-weight: 700; margin: 4px 0; }
+      .vote-opt { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--tb-hairline); font-size: 15px; }
+      .vote-opt .n { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .vote-opt .lead-tag { font-size: 11px; font-weight: 700; color: var(--tb-gold); border: 1px solid var(--tb-gold-deep); border-radius: 6px; padding: 1px 6px; white-space: nowrap; }
+      .vote-verdict { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--tb-hairline); font-size: 16px; }
+      .rite { padding: 8px 0; border-top: 1px solid var(--tb-hairline); }
+      .rite:first-of-type { border-top: 0; }
+      .rite button { margin-top: 0; }
+      .rite-desc { margin: 4px 0 0; font-size: 13px; color: var(--tb-dim); }
+      .rite-desc .needs { color: var(--tb-faint); }
+      #outcome { min-height: 22px; color: var(--tb-gold); font-weight: 700; }
+      #outcome.flash { animation: pop .3s ease; }
+      @keyframes pop { 50% { transform: scale(1.06); } }
+      #yt-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: #2b2542; }
+      #yt-status[data-s="STREAMING"] { background: #1d5c3f; color: #b7f7c9; }
+      #yt-status[data-s="RECONNECTING"], #yt-status[data-s="CONNECTING"], #yt-status[data-s="LIVE_CHAT_FOUND"] { background: #6b4e12; color: var(--tb-gold); }
+      #yt-status[data-s="ERROR"], #yt-status[data-s="AUTH_REQUIRED"] { background: #6b1d1d; color: var(--tb-rose); }
+      .src-toggle { display: flex; gap: 12px; margin: 4px 0 8px; font-weight: 700; }
+      .src-toggle label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+      .meterbar { height: 8px; border-radius: 5px; background: rgba(0,0,0,.55); overflow: hidden; margin: 6px 0; }
+      .meterbar > i { display: block; height: 100%; background: var(--tb-teal); }
+      #cc-m2-fill { background: var(--tb-gold); }
+      #cc-vote-fill { background: var(--tb-gold); }
+      pre.log { background: #0d0a1a; border: 1px solid #2b2542; border-radius: 8px; padding: 8px; max-height: 180px; overflow: auto; white-space: pre-wrap; font-size: 12.5px; }
+      #cc-commands h3 { margin: 8px 0 2px; font-size: 12px; color: var(--tb-dim); font-weight: 700; }
+      #cc-commands h3:first-child { margin-top: 0; }
+      #cc-commands div { padding: 3px 0; border-bottom: 1px solid #2b2542; font-size: 13px; }
+      #cc-commands b { color: var(--tb-teal); }
+      details.rehearsal { border: 1px dashed var(--tb-line); border-radius: 8px; padding: 8px; }
+      details.rehearsal summary { cursor: pointer; font-weight: 700; color: var(--tb-dim); min-height: 44px; }
+      footer { padding: 10px 20px 30px; color: #6c757d; font-size: 12px; }
+      code { color: var(--tb-gold); }
+      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+      @media (prefers-reduced-motion: reduce) { #outcome.flash { animation: none; } button { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Tidebound — keeper console</h1>
+        <p>Live stream controls. The OBS overlay (<code>/overlay.html</code>) shows the game to viewers.</p>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <span id="cc-status" role="status">LIVE</span>
+        <button class="ghost" id="btn-pause" style="width:auto">Pause</button>
+        <button class="primary" id="btn-resume" style="width:auto">Resume</button>
+      </div>
+    </header>
+    <main>
+      <section>
+        <div id="game"></div>
+        <div class="card">
+          <h2>Story log</h2>
+          <pre class="log" id="story-log"></pre>
+        </div>
+        <div class="card">
+          <h2>Live feed (batched)</h2>
+          <pre class="log" id="feed-list"></pre>
+        </div>
+      </section>
+      <aside>
+        <div class="cc-group" role="presentation">Now — world and story moment <span class="cc-why">· what is happening</span></div>
+        <div class="card" aria-live="polite">
+          <h2>Live state</h2>
+          <div class="big" id="cc-arc">—</div>
+          <div class="dim" id="cc-chapter">—</div>
+          <div class="stat-row"><span id="cc-threat">—</span><span id="cc-resolve">—</span><span id="cc-supplies">—</span></div>
+          <div id="cc-location">—</div>
+          <div class="dim" id="cc-standing">—</div>
+        </div>
+        <div class="card" aria-live="polite">
+          <h2>Story moment · objective</h2>
+          <div class="big" id="cc-moment">—</div>
+          <div id="cc-objective">—</div>
+          <div id="cc-vex">—</div>
+        </div>
+        <div class="cc-group" role="presentation">Keeper actions — assembly and rites <span class="cc-why">· what you can safely do</span></div>
+        <div class="card" aria-live="polite">
+          <h2>Assembly vote</h2>
+          <div id="cc-vote">—</div>
+          <div class="btn-row">
+            <button class="primary" id="btn-open-v1">Open route vote</button>
+            <button class="primary" id="btn-open-v2">Open Kindling vote</button>
+          </div>
+          <div class="btn-row">
+            <button class="ghost" id="btn-close-vote">Close vote</button>
+          </div>
+          <label>Keeper override (records an auditable deed; winner still needs the rite)</label>
+          <div class="btn-row">
+            <button class="ghost" id="btn-override-0">Lean 1st</button>
+            <button class="ghost" id="btn-override-1">Lean 2nd</button>
+            <button class="ghost" id="btn-override-2">Lean 3rd</button>
+          </div>
+        </div>
+        <div class="card" aria-live="polite">
+          <h2>Keeper rites — named story actions</h2>
+          <div id="cc-rites-hint" class="dim">Named rites only — the assembly decides routes and burnings. Each rite tells one story; costs are paid in supplies or resolve.</div>
+          <div class="rite">
+            <button class="ghost" id="btn-rite-sable" aria-describedby="desc-rite-sable">Sable's mending rite</button>
+            <p class="rite-desc" id="desc-rite-sable">Tend the lantern's iron; Rho hears every hammer-fall. <span class="needs">Needs 5 supplies · ready from the first bell.</span></p>
+          </div>
+          <div class="rite">
+            <button class="ghost" id="btn-rite-tide" aria-describedby="desc-rite-tide">Tide prayer</button>
+            <p class="rite-desc" id="desc-rite-tide">Pray the keepers through the rising Gloam. <span class="needs">Needs threat 50+ and 10 supplies.</span></p>
+          </div>
+          <div class="rite">
+            <button class="ghost" id="btn-rite-ilya" aria-describedby="desc-rite-ilya">Ilya's duel</button>
+            <p class="rite-desc" id="desc-rite-ilya">Answer steel with steel on the Highspire road; Ilya may lower her blade. <span class="needs">Needs parley, 3 kills and 10 resolve.</span></p>
+          </div>
+          <div class="rite">
+            <button class="ghost" id="btn-rite-rekindle" aria-describedby="desc-rite-rekindle">Cinderholm rekindle</button>
+            <p class="rite-desc" id="desc-rite-rekindle">Rekindle the fallen beacon with oil and oath. <span class="needs">Needs Cinderholm lost, 5 beacon oil and 25 supplies.</span></p>
+          </div>
+          <div class="rite">
+            <button class="ghost" id="btn-rite-rho" aria-describedby="desc-rite-rho">Rho's plain speech</button>
+            <p class="rite-desc" id="desc-rite-rho">Draw Rho into plain speech; her first peal wakes the chapel-steps. <span class="needs">Needs Rho's trust (friendly) · once.</span></p>
+          </div>
+        </div>
+        <div class="cc-group" role="presentation">World memory — works, deeds, recap <span class="cc-why">· what changed</span></div>
+        <div class="card">
+          <h2>Community works</h2>
+          <div id="cc-m1">—</div>
+          <div class="meterbar" role="progressbar" aria-label="Charting the Pale"><i id="cc-m1-fill"></i></div>
+          <div id="cc-m2">—</div>
+          <div class="meterbar" role="progressbar" aria-label="Beacon Oil"><i id="cc-m2-fill"></i></div>
+        </div>
+        <div class="card">
+          <h2>The world remembers</h2>
+          <div id="cc-deeds">—</div>
+        </div>
+        <div class="card">
+          <h2>Previously, in Tidebound…</h2>
+          <div id="cc-recap">—</div>
+          <div class="btn-row">
+            <button class="ghost" id="btn-end-stream">Close stream &amp; open next</button>
+          </div>
+        </div>
+        <div class="cc-group" role="presentation">Audience — what viewers can do <span class="cc-why">· commands, grouped by meaning</span></div>
+        <div class="card">
+          <h2>What viewers can type</h2>
+          <div id="cc-commands">—</div>
+        </div>
+        <div class="cc-group" role="presentation">System — rehearsal, connection, queue, persistence <span class="cc-why">· safe to continue</span></div>
+        <div class="card">
+          <details class="rehearsal">
+            <summary>Rehearsal (test-only simulation)</summary>
+            <div class="row">
+              <div><label>Viewer name</label><input id="viewer-name" value="Kaushal" /></div>
+              <div><label>Viewer id</label><input id="viewer-id" value="kaushal" /></div>
+            </div>
+            <label>Command (whitelisted)</label>
+            <select id="command">
+              <option>!strike</option>
+              <option>!mend</option>
+              <option>!scout</option>
+              <option>!shield</option>
+              <option>!ring</option>
+              <option>!hide</option>
+              <option>!tribute</option>
+              <option>!defy</option>
+              <option>!voteA</option>
+              <option>!voteB</option>
+              <option>!help</option>
+            </select>
+            <button class="primary" id="btn-command">Send Command</button>
+            <div class="row">
+              <div>
+                <label>Paid event</label>
+                <select id="paid-preset">
+                  <option value="50">₹50 — Gale Call</option>
+                  <option value="100">₹100 — Supply Convoy</option>
+                  <option value="500">₹500 — Herald's Attention</option>
+                  <option value="1000">₹1000 — The Bell Tolls</option>
+                  <option value="custom">custom…</option>
+                </select>
+              </div>
+              <div><label>Custom ₹</label><input id="paid-custom" type="number" min="1" placeholder="25" /></div>
+            </div>
+            <button class="paid" id="btn-paid">Send Paid Event</button>
+            <div id="outcome" role="status"></div>
+          </details>
+        </div>
+        <div class="card">
+          <h2>Input source</h2>
+          <div class="src-toggle">
+            <label><input type="radio" name="src" id="src-sim" checked /> Simulation</label>
+            <label><input type="radio" name="src" id="src-yt" /> YouTube Live</label>
+          </div>
+          <div>Status: <span id="yt-status" data-s="off">off</span></div>
+          <pre class="log" id="yt-detail" style="max-height:110px">(start the youtube sidecar, then switch to YouTube Live)</pre>
+          <button class="ghost" id="btn-yt-auth">1 · Authorize with Google</button>
+          <button class="primary" id="btn-yt-connect">2 · Connect to live chat</button>
+          <button class="ghost" id="btn-yt-disconnect">Disconnect</button>
+        </div>
+        <div class="card">
+          <h2>Event queue</h2>
+          <pre class="log" id="queue-list"></pre>
+        </div>
+        <div class="card">
+          <h2>Persistence</h2>
+          <button class="ghost" id="btn-save">Save World</button>
+          <button class="ghost" id="btn-reload">Reload World</button>
+          <button class="ghost" id="btn-export">Export JSON</button>
+          <button class="danger" id="btn-reset">Reset World</button>
+          <div class="dim" id="cc-ledger">—</div>
+        </div>
+      </aside>
+    </main>
+    <footer>
+      Engine: <code>src/engine</code> (no DOM/Phaser) · Presentation: <code>src/presentation</code> (read-only projections) · Queue: paid-first, deduped, bounded · Saves to
+      <code>data/world-state.json</code> via <code>npm run persist-server</code>, else localStorage.
+    </footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
