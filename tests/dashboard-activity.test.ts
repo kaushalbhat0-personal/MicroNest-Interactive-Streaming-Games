@@ -29,6 +29,7 @@ import {
 const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const ACTIVITY_TS = readFileSync(join(ROOT, "src", "dashboard", "activity.ts"), "utf8");
 const PACKAGE_JSON = readFileSync(join(ROOT, "package.json"), "utf8");
 
@@ -408,11 +409,19 @@ describe("UX-005 architecture audit", () => {
   });
 
   it("no new polling loop; render path constructs nothing", () => {
-    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(3);
+    // T4F-C1 migration: the 250ms simulation pump and the 1s canvas re-sync
+    // moved to the authority server (src/main.ts owns boot; the server owns
+    // the loop). app.ts keeps exactly the 1s panel refresh — same shape,
+    // fewer loops, still no construction in the render path.
+    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(1);
     const body = APP_TS.slice(APP_TS.indexOf("export function renderPanelState"));
     expect(body).not.toContain("setInterval(");
     expect(body).not.toMatch(/new (EventQueue|FeedAggregator|WorldStore|YouTubeSource|GameEngine)\(/);
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+    // T4F-C1 migration: the single Phaser.Game (console preview) is created
+    // in the dashboard boot entry (src/main.ts), not in app.ts. Still
+    // exactly one game for the whole dashboard bundle.
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
   });
 
   it("no new engine/YouTube/persistence APIs; no new dependencies", () => {

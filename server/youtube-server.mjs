@@ -8,6 +8,8 @@
 //   GET  /api/youtube/stream          SSE: canonical events (replay via Last-Event-ID)
 //   POST /api/youtube/inject          DEV-ONLY: push a raw YT-shaped message through
 //                                      the mapper (manual testing without a live stream)
+//   POST /api/youtube/send            T3: post one announcement to the live chat
+//                                      (validated text + safe event id; typed errors)
 // Run: node server/youtube-server.mjs [port]   (default 3002)
 import { createServer } from "node:http";
 import { mkdir } from "node:fs/promises";
@@ -175,6 +177,59 @@ const server = createServer(async (req, res) => {
       }
     } catch {
       json(res, 400, { error: "invalid-json" });
+    }
+    return;
+  }
+  if (url.pathname === "/api/youtube/send" && req.method === "POST") {
+    // T3 outbound announcement. Browser submits text + a safe event id;
+    // tokens stay in this process. Bounded body; typed errors only.
+    let raw = "";
+    try {
+      for await (const chunk of req) {
+        raw += chunk;
+        if (raw.length > 4096) {
+          json(res, 413, { ok: false, error: "too-long" });
+          return;
+        }
+      }
+    } catch {
+      json(res, 400, { ok: false, error: "invalid-json" });
+      return;
+    }
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      json(res, 400, { ok: false, error: "invalid-json" });
+      return;
+    }
+    const text = parsed?.text;
+    const eventId = parsed?.eventId;
+    if (typeof text !== "string" || typeof eventId !== "string") {
+      json(res, 400, { ok: false, error: "invalid-text" });
+      return;
+    }
+    try {
+      const out = await adapter.sendChatMessage({ text, eventId });
+      if (out.ok) {
+        json(res, 200, { ok: true, duplicate: !!out.duplicate, messageId: out.messageId ?? null });
+        return;
+      }
+      const statusByError = {
+        "invalid-text": 400,
+        "too-long": 400,
+        "invalid-event": 400,
+        "auth-required": 401,
+        "insufficient-scope": 403,
+        "no-live-chat": 409,
+        "rate-limited": 429,
+        "quota-exceeded": 429,
+        uncertain: 504,
+        "api-error": 502,
+      };
+      json(res, statusByError[out.error] ?? 500, { ok: false, error: out.error });
+    } catch {
+      json(res, 500, { ok: false, error: "api-error" });
     }
     return;
   }

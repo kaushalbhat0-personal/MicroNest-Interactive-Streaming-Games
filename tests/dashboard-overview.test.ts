@@ -21,6 +21,7 @@ import {
 const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const OVERVIEW_TS = readFileSync(join(ROOT, "src", "dashboard", "overview.ts"), "utf8");
 
 function countId(html: string, id: string): number {
@@ -342,15 +343,20 @@ describe("UX-003 regression audit", () => {
   });
 
   it("persistence signal threaded without changing save semantics", () => {
-    expect(APP_TS).toContain('persistFrom = from;');
-    expect(APP_TS).toContain("persistFrom = await store.save(engine.world);");
-    expect(APP_TS).toContain("persistFrom = loaded.from;");
+    // T4F-C1 migration: saves are written by the authority server (file
+    // only); the dashboard feeds the same honest file/local/none mapping
+    // from the control plane (`persist.from`) through setPersistFrom.
+    // The presentation mapping itself is untouched.
+    expect(APP_TS).toContain("setPersistFrom(");
     expect(APP_TS).toContain("persistLine(persistFrom)");
     expect(APP_TS).not.toContain("localStorage.setItem");
   });
 
   it("exactly one Phaser initialization; overlay entry untouched", () => {
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+    // T4F-C1 migration: the single console-preview game lives in the
+    // dashboard boot entry (src/main.ts). Still exactly one.
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     expect(APP_TS).toContain("persistFrom");
   });
 

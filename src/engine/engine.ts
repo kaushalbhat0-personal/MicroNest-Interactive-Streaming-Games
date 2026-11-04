@@ -490,7 +490,8 @@ export class GameEngine {
         return { ...base, action: "defy", summary: msg, visual: { shake: true } };
       }
       case "!votea":
-      case "!voteb": {
+      case "!voteb":
+      case "!votec": {
         // Reserved for audience voting. Whitelisted so ingestion accepts the
         // token, but deliberately inert: no state change, no counters, no templates.
         // Votes open through the session API when the assembly is called.

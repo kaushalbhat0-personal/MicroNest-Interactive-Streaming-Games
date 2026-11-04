@@ -33,7 +33,14 @@ export interface AdapterState {
   discovery: { at: string; broadcastType: string; activeItems: number; withChat: number; ownChannelMatch: number } | null;
   cursor: { liveChatId: string; platformId: string } | null;
   diag: AdapterDiag;
+  /** T3 outbound capability: unknown until the first insert proves the grant. */
+  outbound: "unknown" | "ok" | "insufficient";
+  deliveredAnnouncements: number;
 }
+
+export type SendChatMessageResult =
+  | { ok: true; messageId?: string | null; duplicate?: boolean }
+  | { ok: false; error: string };
 
 export interface YouTubeAdapterOptions {
   fetchImpl?: typeof fetch;
@@ -54,6 +61,12 @@ export class YouTubeAdapter {
   reconnects: number;
   stopped: boolean;
   diag: AdapterDiag;
+  /** T3: unknown until the first insert proves the grant. */
+  outbound: "unknown" | "ok" | "insufficient";
+  delivered: Map<string, string | null>;
+  lastApi: { endpoint: string; status: number | null; at: string } | null;
+  sendTimes: number[];
+  sendChain: Promise<unknown>;
   init(tokenPath: string): Promise<void>;
   loadCursor(): Promise<void>;
   saveCursor(): Promise<void>;
@@ -68,6 +81,11 @@ export class YouTubeAdapter {
   discoverAndStream(): Promise<void>;
   pollOnce(): Promise<void>;
   getState(): AdapterState;
+  pruneSendTimes(now: number): void;
+  markDelivered(eventId: string, messageId: string | null): void;
+  sendChatMessage(args: { text: string; eventId: string }): Promise<SendChatMessageResult>;
+  insertThrottled(text: string, eventId: string): Promise<SendChatMessageResult>;
+  insertMessage(text: string, eventId: string): Promise<SendChatMessageResult>;
 }
 
 export function clampPoll(serverMs: unknown): number;

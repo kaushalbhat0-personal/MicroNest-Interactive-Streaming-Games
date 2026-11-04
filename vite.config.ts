@@ -12,8 +12,12 @@ export default defineConfig({
       deny: [".env", ".env.*", "*.{crt,pem}", "data/**", "server/**"],
     },
     proxy: {
-      // More specific first: /api/youtube -> sidecar, /api -> persist server.
+      // More specific first: /api/youtube -> sidecar, /api/state -> state
+      // transport (T4F-B dual-renderer snapshots/SSE), /api/authority ->
+      // authority server (T4F-C1 control API), /api -> persist.
       "/api/youtube": "http://localhost:3002",
+      "/api/state": "http://localhost:3003",
+      "/api/authority": "http://localhost:3004",
       "/api": "http://localhost:3001",
     },
   },

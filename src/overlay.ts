@@ -1,5 +1,6 @@
-import { createRuntime } from "./app";
-import "./presentation/tidebound.css";
+import { bootRenderer } from "./renderer/renderer";
 
-// Overlay entry: game + read-only HUD, no panel, never writes persistence.
-void createRuntime({ withPanel: false });
+// T4F-B renderer entry: one Phaser.Game + read-only snapshot/SSE
+// subscription. No engine, no ingestion, no simulation fallback —
+// see src/renderer/renderer.ts.
+void bootRenderer();

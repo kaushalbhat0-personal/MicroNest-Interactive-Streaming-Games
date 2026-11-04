@@ -45,10 +45,11 @@ describe("5G-8A viewer hierarchy", () => {
     expect(html).toContain("Act");
     expect(html).toContain("Explore");
     expect(html).toContain("Decide");
-    for (const c of ["!strike", "!mend", "!scout", "!shield", "!ring", "!hide", "!tribute", "!defy", "!voteA", "!voteB"]) {
+    for (const c of ["!strike", "!mend", "!scout", "!shield", "!ring", "!hide", "!tribute", "!defy", "!voteA", "!voteB", "!voteC"]) {
       expect(html).toContain(c);
     }
-    expect(html).not.toContain("!voteC");
+    // T4C Option 1: third option appears exactly once (Decide row).
+    expect(html.split("!voteC").length - 1).toBe(1);
     // No internal ids leak to viewers.
     expect(html).not.toContain("vote-which-road");
     expect(html).not.toContain("vote-kindling");

@@ -21,6 +21,7 @@ import {
 const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const CONTROL_TS = readFileSync(join(ROOT, "src", "dashboard", "control.ts"), "utf8");
 const PACKAGE_JSON = readFileSync(join(ROOT, "package.json"), "utf8");
 
@@ -377,8 +378,12 @@ describe("UX-004 architecture audit", () => {
   });
 
   it("no new polling loop; single Phaser init; no new dependencies", () => {
-    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(3);
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+    // T4F-C1 migration: simulation pump + canvas sync left app.ts for the
+    // authority server; the single preview game lives in src/main.ts.
+    // Same audit shape: one panel refresh in app.ts, one game in boot.
+    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(1);
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
     expect(Object.keys(pkg.dependencies ?? {})).toEqual(["phaser"]);
   });

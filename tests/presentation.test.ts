@@ -308,15 +308,14 @@ describe("5F — story and consequence presentation", () => {
 // ---------------------------------------------------------------------------
 
 describe("5F — command guide", () => {
-  it("shows the 11 canonical commands and no legacy verbs", () => {
+  it("shows the 12 canonical commands and no legacy verbs", () => {
     const guide = commandGuide(COMMANDS as unknown as Record<string, { does: string }>);
     const cmds = guide.map((g) => g.command);
-    for (const c of ["!strike", "!mend", "!scout", "!shield", "!ring", "!hide", "!tribute", "!defy", "!voteA", "!voteB", "!help"]) {
+    for (const c of ["!strike", "!mend", "!scout", "!shield", "!ring", "!hide", "!tribute", "!defy", "!voteA", "!voteB", "!voteC", "!help"]) {
       expect(cmds).toContain(c);
     }
     for (const legacy of ["!attack", "!heal", "!search"]) {
       expect(cmds).not.toContain(legacy);
     }
-    expect(cmds).not.toContain("!voteC"); // only 2 vote tokens exist
   });
 });

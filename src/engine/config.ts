@@ -20,6 +20,7 @@ export const COMMANDS: Record<string, CommandMapping> = {
   "!defy": { does: "Provoke the faced faction and raise danger", cooldownMs: 5000 },
   "!votea": { does: "Reserved for audience votes (opened by the assembly's call)", cooldownMs: 5000 },
   "!voteb": { does: "Reserved for audience votes (opened by the assembly's call)", cooldownMs: 5000 },
+  "!votec": { does: "Reserved for audience votes (opened by the assembly's call)", cooldownMs: 5000 },
   "!help": { does: "Show available commands", cooldownMs: 2000 },
 };
 

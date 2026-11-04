@@ -19,6 +19,7 @@ const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const SHELL_TS = readFileSync(join(ROOT, "src", "dashboard", "shell.ts"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const PACKAGE_JSON = readFileSync(join(ROOT, "package.json"), "utf8");
 
 function countId(html: string, id: string): number {
@@ -349,7 +350,9 @@ describe("UX-002 update-safety audit", () => {
   });
 
   it("no new Phaser.Game construction and no YT reconnect path in shell wiring", () => {
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+    // T4F-C1 migration: the single preview game lives in src/main.ts.
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     expect(SHELL_TS).not.toContain("new Phaser");
     expect(SHELL_TS).not.toContain("EventSource");
     expect(SHELL_TS).not.toMatch(/[^a-zA-Z]fetch\(/);

@@ -21,6 +21,7 @@ import {
 const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const SETTINGS_TS = readFileSync(join(ROOT, "src", "dashboard", "settings.ts"), "utf8");
 const PACKAGE_JSON = readFileSync(join(ROOT, "package.json"), "utf8");
 
@@ -168,7 +169,11 @@ describe("UX-006 relocation", () => {
     for (const sig of [
       "rt.yt.start()", "rt.yt.stop()", "rt.yt.authUrl()", "await rt.yt.connect()", "await rt.yt.disconnectServer()",
       "rt.sendCommand(id, name, cmd)", 'rt.sendPaid(id, name, Math.round(major * 100), "INR")',
-      "persistFrom = await store.save(engine.world)", "rt.store.exportFile(rt.engine.world)",
+      // T4F-C1 migration: persistence moved server-side. The dashboard no
+      // longer writes saves itself (`store.save` owned by the authority);
+      // it feeds the honest file/local/none mapping from the control plane
+      // through setPersistFrom (server reports `persist.from`).
+      "setPersistFrom(", "rt.store.exportFile(rt.engine.world)",
     ]) {
       expect(APP_TS).toContain(sig);
     }
@@ -303,8 +308,12 @@ describe("UX-006 architecture audit", () => {
   });
 
   it("no new polling loop, transport listener, or backend call", () => {
-    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(3);
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+    // T4F-C1 migration: simulation pump + canvas sync left app.ts for the
+    // authority server; the dashboard boot entry owns the single preview
+    // game. app.ts keeps exactly the panel refresh — same audit shape.
+    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(1);
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
     expect(Object.keys(pkg.dependencies ?? {})).toEqual(["phaser"]);
   });

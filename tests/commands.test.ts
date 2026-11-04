@@ -23,9 +23,9 @@ function harness() {
 }
 
 describe("Phase 5B — canonical Tidebound vocabulary", () => {
-  it("COMMANDS lists exactly the 11 canonical verbs", () => {
+  it("COMMANDS lists exactly the 12 canonical verbs", () => {
     expect(Object.keys(COMMANDS).sort()).toEqual(
-      ["!defy", "!help", "!hide", "!mend", "!ring", "!scout", "!shield", "!strike", "!tribute", "!votea", "!voteb"].sort(),
+      ["!defy", "!help", "!hide", "!mend", "!ring", "!scout", "!shield", "!strike", "!tribute", "!votea", "!voteb", "!votec"].sort(),
     );
     expect("!attack" in COMMANDS).toBe(false);
     expect("!heal" in COMMANDS).toBe(false);
@@ -198,15 +198,16 @@ describe("Phase 5B — new verbs", () => {
 });
 
 describe("Phase 5B — reserved vote commands are inert", () => {
-  it("!voteA/!voteB queue through the whitelist but change nothing", () => {
+  it("!voteA/!voteB/!voteC queue through the whitelist but change nothing", () => {
     const { engine, drain } = harness();
     const before = JSON.parse(JSON.stringify(engine.world)) as typeof engine.world;
     expect(engine.ingestCommand("u1", "A", "!voteA")).toBe("queued");
     expect(engine.ingestCommand("u2", "B", "!voteB")).toBe("queued");
+    expect(engine.ingestCommand("u3", "C", "!voteC")).toBe("queued");
     const results = drain();
-    expect(results.map((r) => r.action)).toEqual(["rejected", "rejected"]);
+    expect(results.map((r) => r.action)).toEqual(["rejected", "rejected", "rejected"]);
     // Processed (not dropped): the engine counted the actions…
-    expect(engine.world.totalViewerActions).toBe(before.totalViewerActions + 2);
+    expect(engine.world.totalViewerActions).toBe(before.totalViewerActions + 3);
     // …but no gameplay, story, or template-visible state changed.
     const strip = (w: unknown) => {
       const c = JSON.parse(JSON.stringify(w)) as Record<string, unknown>;

@@ -560,19 +560,22 @@ export function commandGuide(commands: Record<string, { does: string }>): Comman
     "!defy",
     "!votea",
     "!voteb",
+    "!votec",
     "!help",
   ];
   const out: CommandModel[] = [];
   for (const key of order) {
     const entry = commands[key];
     if (!entry) continue;
-    const display = key === "!votea" ? "!voteA" : key === "!voteb" ? "!voteB" : key;
+    const display = key === "!votea" ? "!voteA" : key === "!voteb" ? "!voteB" : key === "!votec" ? "!voteC" : key;
     const does =
       key === "!votea"
         ? "Vote for the first path (when the assembly is called)"
         : key === "!voteb"
           ? "Vote for the second path (when the assembly is called)"
-          : entry.does;
+          : key === "!votec"
+            ? "Vote for the third path (when the assembly is called)"
+            : entry.does;
     out.push({ command: display, does });
   }
   return out;

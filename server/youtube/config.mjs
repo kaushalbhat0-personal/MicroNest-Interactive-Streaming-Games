@@ -22,7 +22,18 @@ export const YT = {
   tokenPath: join(profileDir, "youtube-tokens.json"),
   cursorPath: join(root, "data", ".youtube-cursor.json"),
   clientFile: join(profileDir, "youtube-client.json"),
-  scopes: ["https://www.googleapis.com/auth/youtube.readonly"],
+  scopes: [
+    // Read path (unchanged): listing chat for inbound commands.
+    "https://www.googleapis.com/auth/youtube.readonly",
+    // Outbound path (T3): posting vote announcements via
+    // liveChatMessages.insert. Least privilege that permits insert; the
+    // readonly entry is kept so the consent screen and any readonly-only
+    // grant keep their exact previous meaning. Adding a scope requires
+    // re-consent (the auth URL already forces prompt=consent); tokens
+    // granted before T3 keep working for reads, and sends with such a
+    // token fail closed as `insufficient-scope` (never silently).
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+  ],
   // Floor under the server's pollingIntervalMillis: quota guard for the spike.
   // Default YouTube quota (10k units/day) sustains ~2000 list calls/day.
   minPollMs: Number(process.env.YT_MIN_POLL_MS ?? 10000),
@@ -35,6 +46,14 @@ export const YT = {
   maxReconnects: 10,
   // Bounded ingestion: SSE replay buffer + diagnostics only, no unbounded growth.
   sseBufferSize: 200,
+  // Outbound announcements (T3): per-minute insert budget (insert costs
+  // ~50 quota units vs 5 for list) and send timeout. Ambiguous timeouts
+  // report `uncertain` — never retried blindly by the server.
+  maxSendsPerMinute: 6,
+  sendTimeoutMs: Number(process.env.YT_SEND_TIMEOUT_MS ?? 15000),
+  // Bounded delivered-event memory: retries reuse the identity; the map
+  // only answers "already delivered" and never grows without bound.
+  maxDeliveredEvents: 200,
 };
 
 export async function loadClientConfig() {

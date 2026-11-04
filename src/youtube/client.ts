@@ -14,10 +14,26 @@ export interface YtStatus {
   liveChatId?: string | null;
   broadcastTitle?: string | null;
   reconnects?: number;
+  /** T3 outbound capability: unknown until the first insert proves the grant. */
+  outbound?: "unknown" | "ok" | "insufficient";
   diag?: { seen: number; commands: number; paid: number; ignored: number; polls: number; apiErrors: number };
 }
 
 const LAST_ID_KEY = "emberkeep.yt.lastId";
+
+/**
+ * F1 vote-token → ballot option index (T4C: three whitelisted vote tokens).
+ * The engine whitelist admits exactly three vote tokens; the index selects
+ * into the active vote's options and `castVote` re-validates the bounds.
+ * Anything else is not a ballot.
+ * The mapper already lowercases the token, so matching is exact here.
+ */
+export function voteOptionIndex(command: string): number | null {
+  if (command === "!votea") return 0;
+  if (command === "!voteb") return 1;
+  if (command === "!votec") return 2;
+  return null;
+}
 
 function isCanonical(ev: unknown): ev is CanonicalEvent {
   if (!ev || typeof ev !== "object") return false;
@@ -53,6 +69,18 @@ export class YouTubeSource {
   lastStatus: YtStatus = { status: "off" };
   /** Browser-side counters: what arrived vs what the engine accepted. */
   diag = { received: 0, queued: 0, duplicate: 0, rejected: 0 };
+
+  /**
+   * F1: observer for whitelisted vote commands. The app shell casts these
+   * through the same authoritative session operation the simulation panel
+   * uses (`castSessionVote`); transport never touches vote state directly.
+   * Invoked with the stable channel identity (`yt:<channelId>`) and the
+   * ballot option index. Fires before engine ingest, mirroring `sendCommand`
+   * (ballot rides alongside ingestion); `castVote` itself re-validates the
+   * session, the actor, and the index, and repeat messages collapse to one
+   * ballot per actor by construction.
+   */
+  onVoteCommand?: (actorId: string, optionIndex: number) => void;
 
   constructor(private readonly engine: GameEngine) {}
 
@@ -143,6 +171,12 @@ export class YouTubeSource {
       this.diag.rejected += 1;
       return;
     }
+    // F1: vote ballots ride alongside ingestion through the shared session
+    // operation (wired by the app shell). Only whitelisted tokens reach here.
+    if (ev.kind === "chat_command") {
+      const idx = voteOptionIndex(ev.command);
+      if (idx !== null) this.onVoteCommand?.(ev.actorId, idx);
+    }
     this.diag.received += 1;
     const outcome = this.engine.ingest(ev);
     if (outcome === "queued") this.diag.queued += 1;
@@ -160,6 +194,31 @@ export class YouTubeSource {
   async connect(): Promise<void> {
     await fetch("/api/youtube/connect", { method: "POST" });
     await this.refreshStatus();
+  }
+
+  /**
+   * T3: submit one announcement (text + safe event id). The sidecar owns
+   * tokens and the insert call; the browser never sees credentials.
+   * Never throws for expected failures — always a typed result.
+   */
+  async sendAnnouncement(
+    text: string,
+    eventId: string,
+  ): Promise<{ ok: true; duplicate?: boolean } | { ok: false; reason: string }> {
+    try {
+      const res = await fetch("/api/youtube/send", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text, eventId }),
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; duplicate?: boolean } | null;
+      if (res.ok && data?.ok) return { ok: true, duplicate: !!data.duplicate };
+      const reason = typeof data?.error === "string" && data.error.length > 0 ? data.error : "api-error";
+      await this.refreshStatus();
+      return { ok: false, reason };
+    } catch {
+      return { ok: false, reason: "sidecar-unreachable" };
+    }
   }
 
   async disconnectServer(): Promise<void> {

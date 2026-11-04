@@ -1,242 +1,915 @@
 import Phaser from "phaser";
 import type { FeedEntry } from "../engine/feed";
 import type { GameResult, WorldState } from "../engine/types";
+import {
+  KEEPER_ATLAS_KEY,
+  KEEPER_JSON_URL,
+  KEEPER_PNG_URL,
+  KEEPER_POSES,
+  allKeeperFrames,
+  keeperAnimKey,
+  keeperFrame,
+  resolveKeeperOneShot,
+  resolveKeeperPose,
+  resolveKeeperPreview,
+  shouldSwitchAnim,
+  type KeeperPose,
+} from "./keeperAnims";
 
 const W = 1920;
 const H = 1080;
+const HORIZON = 660;
 
-/** Minimal overlay scene: primitive shapes + text only. Visualizes state; holds no game logic. */
+// T4C portrait reference composition (format-selected, single scene).
+// Landscape stays byte-identical; portrait reframes (not crops/scales).
+export type WorldFormat = "landscape" | "portrait";
+const PW = 1080;
+const PH = 1920;
+const PHORIZON = 700;
+
+/** Deterministic 0..1 hash for render-only scatter (stable screenshots). */
+function hash01(seed: number): number {
+  const v = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return v - Math.floor(v);
+}
+
+/**
+ * 5H-B — Drowned-archipelago diorama (primitives only, no game logic).
+ * The canvas carries the WORLD (sky, sea, lighthouse, reef, vessel);
+ * prose (story, feed, votes, deeds) lives in the DOM HUD/panel, so the
+ * scene keeps only world-anchored labels and bars. All sync/discrete
+ * effects stay state-driven via syncWorld()/playResult().
+ */
 export class GameScene extends Phaser.Scene {
-  private topText!: Phaser.GameObjects.Text;
-  private threatBar!: Phaser.GameObjects.Graphics;
-  private heroBar!: Phaser.GameObjects.Graphics;
+  // Note (5H-D): the canvas is a pure diorama — world-anchored entity
+  // bars/labels only. Titles, threat, supplies and prose live in the DOM
+  // (dashboard header/strip, overlay HUD), so nothing collides with them.
+  private waves!: Phaser.GameObjects.Graphics;
+  private wavePhase = 0;
+  private chop = 0.5;
+
+  private skyTint!: Phaser.GameObjects.Rectangle;
+  private moon!: Phaser.GameObjects.Container;
+  private moonDisc!: Phaser.GameObjects.Arc;
+  private clouds: Phaser.GameObjects.Ellipse[] = [];
+
+  private lampGlow!: Phaser.GameObjects.Arc;
+  private lampCore!: Phaser.GameObjects.Arc;
+  private beam!: Phaser.GameObjects.Graphics;
   private keepBar!: Phaser.GameObjects.Graphics;
-  private enemyBar!: Phaser.GameObjects.Graphics;
-  private heroHpText!: Phaser.GameObjects.Text;
   private keepHpText!: Phaser.GameObjects.Text;
-  private enemyHpText!: Phaser.GameObjects.Text;
-  private enemyLabel!: Phaser.GameObjects.Text;
-  private resourceText!: Phaser.GameObjects.Text;
-  private waveText!: Phaser.GameObjects.Text;
-  private storyText!: Phaser.GameObjects.Text;
-  private feedText!: Phaser.GameObjects.Text;
-  private shieldText!: Phaser.GameObjects.Text;
-  private vexText!: Phaser.GameObjects.Text;
-  private placeText!: Phaser.GameObjects.Text;
-  private reducedMotion: boolean = false;
-  private hero!: Phaser.GameObjects.Container;
-  private enemy!: Phaser.GameObjects.Container;
-  private enemyBody!: Phaser.GameObjects.Rectangle;
-  private keep!: Phaser.GameObjects.Container;
+  private keepLabel!: Phaser.GameObjects.Text;
   private shieldBubble!: Phaser.GameObjects.Arc;
-  private embers!: Phaser.GameObjects.Particles.ParticleEmitter;
+  private shieldText!: Phaser.GameObjects.Text;
+
+  private hero!: Phaser.GameObjects.Container;
+  private heroBar!: Phaser.GameObjects.Graphics;
+  private heroHpText!: Phaser.GameObjects.Text;
+  private skiffLantern!: Phaser.GameObjects.Arc;
+  // P1D keeper sprite (atlas-gated; primitives stay the fallback).
+  private keeperSprite: Phaser.GameObjects.Sprite | null = null;
+  private keeperAnim: string | null = null;
+  private keeperOneShot = false;
+  private keeperShieldOn = false;
+  /** Dev-only preview lock (`?keeperPreview=`); null in normal play. */
+  private keeperPreview: KeeperPose | null = null;
+  private keeperPrimitives: Phaser.GameObjects.Shape[] = [];
+  private keeperFlashPrimitive: Phaser.GameObjects.Arc | null = null;
+
+  private reefLanterns: Phaser.GameObjects.Arc[] = [];
+  private reefLabel!: Phaser.GameObjects.Text;
+
+  private vessel!: Phaser.GameObjects.Container;
+  private vesselBody!: Phaser.GameObjects.Rectangle;
+  private vesselLights: Phaser.GameObjects.Arc[] = [];
+  private vesselBar!: Phaser.GameObjects.Graphics;
+  private vesselHpText!: Phaser.GameObjects.Text;
+  private vesselLabel!: Phaser.GameObjects.Text;
+
+  private chapelFlame!: Phaser.GameObjects.Arc;
+  private chapelLabel!: Phaser.GameObjects.Text;
+
+  private reducedMotion = false;
+
+  // T4C format-selected composition (default landscape; `?format=portrait`
+  // selects the 1080×1920 reframe). WorldState, textures, Keeper/Vessel
+  // containers and engine projections are shared; only positions, camera
+  // bounds, label sizes and burst anchors change. No second Game instance.
+  private format: WorldFormat = "landscape";
+
+  // Addendum static markers: immediate non-animated feedback in reduced
+  // motion (impact + heal). Created once, toggled per result, never tweened.
+  private impactMarker!: Phaser.GameObjects.Container;
+  private impactGlyph!: Phaser.GameObjects.Arc;
+  private impactLabel!: Phaser.GameObjects.Text;
+  private healMarker!: Phaser.GameObjects.Container;
+  private healGlyph!: Phaser.GameObjects.Arc;
+  private healLabel!: Phaser.GameObjects.Text;
 
   constructor() {
     super("game");
   }
 
+  /** T4C: format selection (URL `?format=portrait` or explicit call). */
+  setFormat(f: WorldFormat): void {
+    this.format = f;
+  }
+
+  getFormat(): WorldFormat {
+    return this.format;
+  }
+
+  private get isPortrait(): boolean {
+    return this.format === "portrait";
+  }
+
+  private get WW(): number {
+    return this.isPortrait ? PW : W;
+  }
+
+  private get WH(): number {
+    return this.isPortrait ? PH : H;
+  }
+
+  private get HZ(): number {
+    return this.isPortrait ? PHORIZON : HORIZON;
+  }
+
+  /** Burst/effect anchors follow the active composition (never clipped). */
+  private hitAnchor(): { x: number; y: number } {
+    return this.isPortrait ? { x: 680, y: 680 } : { x: 1420, y: 740 };
+  }
+
+  private healAnchor(): { x: number; y: number } {
+    return this.isPortrait ? { x: 540, y: 880 } : { x: 720, y: 820 };
+  }
+
+  private reefAnchor(): { x: number; y: number } {
+    if (this.isPortrait) {
+      const lit = this.reefLanterns?.find((l) => l.fillColor !== 0xffd166);
+      return lit ? { x: lit.x, y: lit.y } : { x: 540, y: 1150 };
+    }
+    const lit = this.reefLanterns?.find((l) => l.fillColor !== 0xffd166);
+    return lit ? { x: lit.x, y: lit.y } : { x: 1050, y: 860 };
+  }
+
+  private storyAnchor(): { x: number; y: number } {
+    return this.isPortrait ? { x: 540, y: 400 } : { x: 960, y: 420 };
+  }
+
+  preload(): void {
+    // P1D: keeper atlas. A missing file only fails this load; create()
+    // keeps primitives whenever the texture is absent (never blank).
+    this.load.atlas(KEEPER_ATLAS_KEY, KEEPER_PNG_URL, KEEPER_JSON_URL);
+  }
+
   create(): void {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      this.format = params.get("format") === "portrait" ? "portrait" : "landscape";
+    } catch {
+      this.format = "landscape";
+    }
     this.reducedMotion =
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Background: dark gradient bands + distant hills (primitives only).
-    const bg = this.add.graphics();
-    bg.fillGradientStyle(0x1a1033, 0x1a1033, 0x3d1e3f, 0x3d1e3f, 1);
-    bg.fillRect(0, 0, W, H);
-    bg.fillStyle(0x241640, 1);
-    bg.fillEllipse(300, 1150, 1400, 500);
-    bg.fillStyle(0x2c1c4d, 1);
-    bg.fillEllipse(1500, 1180, 1500, 520);
-    // Ground
-    bg.fillStyle(0x141021, 1);
-    bg.fillRect(0, 880, W, H - 880);
-    bg.lineStyle(2, 0xff9a3c, 0.35);
-    bg.lineBetween(0, 880, W, 880);
 
-    // Floating embers (ambient particles, Phaser built-in texture).
-    const px = this.textures.createCanvas("px");
-    if (px) {
-      const ctx = px.getContext();
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, 8, 8);
-      px.refresh();
+    // Shared 8px dot texture for particles.
+    if (!this.textures.exists("px")) {
+      const px = this.textures.createCanvas("px");
+      if (px) {
+        const ctx = px.getContext();
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, 8, 8);
+        px.refresh();
+      }
     }
-    this.embers = this.add.particles(0, 0, "px", {
-      x: { min: 0, max: W },
-      y: { min: 300, max: 900 },
-      lifespan: 4000,
-      speedY: { min: -60, max: -20 },
-      scale: { min: 0.2, max: 0.7 },
-      alpha: { min: 0.1, max: 0.6 },
-      tint: [0xff9a3c, 0xffd166, 0xff5d5d],
-      frequency: 120,
-    });
-    this.embers.setDepth(-1);
 
-    // ---- Top bar ----
-    this.topText = this.add
-      .text(40, 24, "", { fontSize: "40px", color: "#ffd166", fontStyle: "bold" })
-      .setDepth(10);
-    this.threatBar = this.add.graphics().setDepth(10);
-    this.add
-      .text(1450, 30, "THREAT", { fontSize: "28px", color: "#ff8fa3" })
-      .setDepth(10);
+    this.buildSky();
+    this.buildSea();
+    this.buildCinderholm();
+    this.buildSkiff();
+    this.buildReef();
+    this.buildVessel();
+    this.buildChapelBrazier();
+    this.buildEyebrow();
+    this.buildStaticMarkers();
 
-    // ---- Keep (left) ----
-    this.keep = this.add.container(330, 620);
-    const tower = this.add.rectangle(0, 0, 220, 320, 0x8d99ae);
-    const trim = this.add.rectangle(0, -120, 240, 40, 0x6c757d);
-    const gate = this.add.rectangle(0, 90, 90, 140, 0x2b2d42);
-    const b1 = this.add.rectangle(-80, -180, 50, 50, 0x8d99ae);
-    const b2 = this.add.rectangle(0, -180, 50, 50, 0x8d99ae);
-    const b3 = this.add.rectangle(80, -180, 50, 50, 0x8d99ae);
-    const flame = this.add.circle(0, -230, 16, 0xff9a3c);
-    this.keep.add([tower, trim, gate, b1, b2, b3, flame]);
-    this.tweens.add({ targets: flame, scale: 1.4, alpha: 0.6, duration: 600, yoyo: true, repeat: -1 });
-    this.add.text(230, 400, "CINDERHOLM", { fontSize: "30px", color: "#edf2f4" });
-    this.keepBar = this.add.graphics();
-    this.keepHpText = this.add.text(230, 440, "", { fontSize: "26px", color: "#edf2f4" });
-    this.shieldBubble = this.add.circle(330, 620, 210, 0x90e0ef, 0.18).setVisible(false);
-    this.shieldText = this.add
-      .text(230, 478, "", { fontSize: "26px", color: "#90e0ef" })
-      .setVisible(false);
+    // Ambient sea spray (behind entities).
+    if (this.textures.exists("px") && !this.reducedMotion) {
+      const spray = this.add.particles(0, 0, "px", {
+        x: { min: 0, max: this.WW },
+        y: { min: this.HZ + 40, max: this.WH - 40 },
+        lifespan: 3800,
+        speedY: { min: -46, max: -16 },
+        speedX: { min: -14, max: 14 },
+        scale: { min: 0.15, max: 0.5 },
+        alpha: { min: 0.06, max: 0.32 },
+        tint: [0x90e0ef, 0xb9b3c7, 0x43aa8b],
+        frequency: 260,
+      });
+      spray.setDepth(1);
+    }
 
-    // ---- Hero (mid) ----
-    this.hero = this.add.container(830, 700);
-    const body = this.add.circle(0, 0, 46, 0x43aa8b);
-    const helm = this.add.rectangle(0, -52, 60, 18, 0xf9c74f);
-    const sword = this.add.rectangle(52, -10, 70, 10, 0xe9ecef).setAngle(-25);
-    this.hero.add([body, helm, sword]);
-    this.add.text(770, 770, "KEEPER", { fontSize: "28px", color: "#b7f7c9" });
-    this.heroBar = this.add.graphics();
-    this.heroHpText = this.add.text(740, 806, "", { fontSize: "26px", color: "#edf2f4" });
+    this.cameras.main.setBounds(0, 0, this.WW, this.WH);
+  }
 
-    // ---- Enemy (right) ----
-    this.enemy = this.add.container(1400, 690);
-    this.enemyBody = this.add.rectangle(0, 0, 110, 130, 0x9d0208);
-    const spike1 = this.add.triangle(0, -95, -30, 0, 30, 0, 0, -60, 0x6a040f);
-    const eye1 = this.add.circle(-22, -15, 10, 0xffd166);
-    const eye2 = this.add.circle(22, -15, 10, 0xffd166);
-    this.enemy.add([this.enemyBody, spike1, eye1, eye2]);
-    this.enemyLabel = this.add.text(1290, 790, "", {
-      fontSize: "30px",
-      color: "#ff8fa3",
-      fontStyle: "bold",
-    });
-    this.enemyBar = this.add.graphics();
-    this.enemyHpText = this.add.text(1320, 830, "", { fontSize: "26px", color: "#edf2f4" });
-
-    // ---- Bottom-left: resources / wave ----
-    this.resourceText = this.add.text(40, 950, "", { fontSize: "32px", color: "#ffd166" });
-    this.waveText = this.add.text(40, 995, "", { fontSize: "26px", color: "#adb5bd" });
-
-    // ---- Right panel: story + feed ----
-    this.add.rectangle(1560, 640, 680, 640, 0x000000, 0.45).setStrokeStyle(2, 0xffd166, 0.4);
-    this.add.text(1240, 340, "STORY", { fontSize: "26px", color: "#ffd166" });
-    this.vexText = this.add
-      .text(960, 120, "", { fontSize: "34px", color: "#ff8fa3", fontStyle: "bold" })
-      .setOrigin(0.5, 0)
-      .setDepth(11);
-    this.placeText = this.add
-      .text(40, 900, "", { fontSize: "26px", color: "#90e0ef" })
-      .setDepth(10);
-    this.storyText = this.add.text(1240, 375, "…", {
-      fontSize: "25px",
-      color: "#fff3d6",
-      wordWrap: { width: 640 },
-    });
-    this.add.text(1240, 560, "LIVE EVENTS", { fontSize: "26px", color: "#90e0ef" });
-    this.feedText = this.add.text(1240, 595, "", {
-      fontSize: "24px",
-      color: "#edf2f4",
-      wordWrap: { width: 640 },
-      lineSpacing: 6,
-    });
-
-    this.cameras.main.setBounds(0, 0, W, H);
+  update(_time: number, delta: number): void {
+    if (this.reducedMotion) return;
+    this.wavePhase += delta * 0.0011;
+    this.drawWaves();
+    for (let i = 0; i < this.clouds.length; i++) {
+      const c = this.clouds[i];
+      c.x += Math.sin(this.wavePhase * 0.24 + i * 2.1) * 0.12;
+    }
   }
 
   // ---------- state sync (called by app after every pump/tick) ----------
 
-  syncWorld(w: WorldState, storyLatest: string[], feed: FeedEntry[]): void {
-    this.topText.setText(`${w.worldName}  ·  Arc ${w.currentArc} · Chapter ${w.currentChapter}`);
-    this.drawThreat(w.threatLevel);
-    this.drawBar(this.keepBar, 230, 400 - 60, 220, w.keepHp, w.maxKeepHp, 0x90be6d);
-    this.keepHpText.setText(`Keep ${w.keepHp}/${w.maxKeepHp}`);
-    this.drawBar(this.heroBar, 740, 770 - 60, 200, w.heroHp, w.maxHeroHp, 0x43aa8b);
-    this.heroHpText.setText(`Hero ${w.heroHp}/${w.maxHeroHp}`);
-    this.drawBar(this.enemyBar, 1290, 790 - 60, 230, w.enemy.hp, w.enemy.maxHp, 0xe63946);
-    this.enemyHpText.setText(
-      w.enemy.hp > 0 ? `${w.enemy.hp}/${w.enemy.maxHp}` : "DEFEATED",
-    );
-    this.enemyLabel.setText(w.enemy.isElite ? `⚠ ELITE: ${w.enemy.name}` : w.enemy.name);
-    this.enemyBody.setFillStyle(w.enemy.isElite ? 0x6a040f : 0x9d0208);
-    this.resourceText.setText(`◆ Supplies ${w.resources}    👁 Lanterns ${w.uniqueSearchers.length}/5`);
-    this.waveText.setText(
-      `Wave ${w.waveNumber} · ${Object.entries(w.factionState).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, 4).map(([k, v]) => `${k} ${v}`).join(" · ")}`,
-    );
-    const shieldOn = Date.now() < w.keepShieldUntil;
-    this.shieldBubble.setVisible(shieldOn);
-    this.shieldText.setVisible(shieldOn).setText(shieldOn ? "🛡 WARD UP" : "");
-
-    // Place + herald pressure, in Tidebound language (read-only projection).
-    const locParts = w.unlockedLocations.map((id) => {
-      const s = w.locationState[id] ?? "sound";
-      const name =
-        id === "cinderholm" ? "Cinderholm" : id === "pale-reaches" ? "Pale Reaches" : id === "chapel-steps" ? "Chapel Steps" : id;
-      return `${name} ${s.toUpperCase()}`;
-    });
-    this.placeText.setText(`◈ ${locParts.join(" · ")}`);
+  syncWorld(w: WorldState, _storyLatest: string[], _feed: FeedEntry[]): void {
+    // Sea chop + sky pressure follow the threat (state-driven weather).
+    this.chop = 0.35 + (w.threatLevel / 100) * 0.9;
     const drivenOff = w.storyFlags["c.vex.driven-off"] === true;
     const vexMet = w.storyFlags["c.vex.met"] === true;
     if (drivenOff) {
-      this.vexText.setText("✦ VEX DRIVEN OFF — CINDERHOLM BREATHES").setColor("#90be6d");
-    } else if (vexMet) {
-      this.vexText.setText("⚠ HERALD VEX — CINDERHOLM STRAINED").setColor("#ff8fa3");
-    } else if (w.enemy.isElite) {
-      this.vexText.setText("⚠ AN ELITE HERALD SAILS FOR CINDERHOLM").setColor("#ff8fa3");
+      this.skyTint.setFillStyle(0xffd166, 0.07);
+      this.moonDisc.setFillStyle(0xfff3d6, 0.95);
+    } else if (vexMet || w.enemy.isElite) {
+      this.skyTint.setFillStyle(0xe63946, 0.1 + (w.threatLevel / 100) * 0.12);
+      this.moonDisc.setFillStyle(0xff8fa3, 0.95);
     } else {
-      this.vexText.setText("");
+      this.skyTint.setFillStyle(0xe63946, (w.threatLevel / 100) * 0.08);
+      this.moonDisc.setFillStyle(0xf4efe4, 0.95);
     }
 
-    if (storyLatest.length > 0) this.storyText.setText(storyLatest[0]);
-    this.feedText.setText(feed.map((e) => (e.count > 1 ? `• ${e.text}` : `• ${e.text}`)).join("\n"));
+    // Cinderholm condition drives the lantern (lighthouse anchor).
+    const cinder = w.locationState["cinderholm"] ?? "sound";
+    if (cinder === "lost") {
+      this.lampCore.setFillStyle(0x4a4360, 1);
+      this.lampGlow.setFillStyle(0x4a4360, 0.1).setVisible(true);
+      this.beam.setVisible(false);
+    } else {
+      this.beam.setVisible(true);
+      if (cinder === "strained") {
+        this.lampCore.setFillStyle(0xf4a261, 1);
+        this.lampGlow.setFillStyle(0xf4a261, 0.22).setVisible(true);
+        this.beam.setAlpha(0.07);
+      } else {
+        this.lampCore.setFillStyle(0xffd166, 1);
+        this.lampGlow.setFillStyle(0xffd166, 0.28).setVisible(true);
+        this.beam.setAlpha(0.13);
+      }
+    }
+
+    // Keep / hero / vessel bars + labels (world-anchored, compact).
+    // T4C: keep bar moved east (x205 → x340) to clear the left HUD rail
+    // (x20–324); labels ride centered above the bar (cx 435).
+    // Portrait reframe anchors below (isPortrait branch).
+    const keepBarX = this.isPortrait ? 445 : 340;
+    const keepBarY = this.isPortrait ? 640 : 592;
+    const heroBarX = this.isPortrait ? 448 : 628;
+    const heroBarY = this.isPortrait ? 1026 : 926;
+    const vesselBarX = this.isPortrait ? 580 : 1280;
+    this.drawBar(this.keepBar, keepBarX, keepBarY, 190, w.keepHp, w.maxKeepHp, 0x90be6d);
+    this.keepHpText.setText(`Keep ${w.keepHp}/${w.maxKeepHp}`);
+    this.keepLabel.setText(cinder === "lost" ? "CINDERHOLM · FALLEN" : "CINDERHOLM");
+    this.keepLabel.setColor(cinder === "lost" ? "#ff8fa3" : cinder === "strained" ? "#ffd166" : "#edf2f4");
+
+    this.drawBar(this.heroBar, heroBarX, heroBarY, 184, w.heroHp, w.maxHeroHp, 0x43aa8b);
+    this.heroHpText.setText(`Keeper ${w.heroHp}/${w.maxHeroHp}`);
+
+    const sunk = w.enemy.hp <= 0;
+    this.drawBar(this.vesselBar, vesselBarX, 566, 200, Math.max(0, w.enemy.hp), w.enemy.maxHp, 0xe63946);
+    this.vesselHpText.setText(sunk ? "REPELLED" : `${w.enemy.hp}/${w.enemy.maxHp}`);
+    this.vesselLabel.setText(w.enemy.isElite ? `ELITE · ${w.enemy.name}` : w.enemy.name);
+    this.vesselBody.setFillStyle(w.enemy.isElite ? 0x6a040f : 0x9d0208);
+    const vesselHomeY = this.isPortrait ? 720 : 780;
+    this.vessel.setAlpha(sunk ? 0.45 : 1).setAngle(sunk ? 9 : 0).setY(sunk ? vesselHomeY + 32 : vesselHomeY);
+    for (const l of this.vesselLights) l.setVisible(!sunk);
+
+    // Pale reef lanterns: exploration progress made visible.
+    const lit = w.uniqueSearchers.length;
+    for (let i = 0; i < this.reefLanterns.length; i++) {
+      const on = i < lit;
+      this.reefLanterns[i].setFillStyle(on ? 0xffd166 : 0x3a3454, 1);
+      this.reefLanterns[i].setAlpha(on ? 1 : 0.7);
+    }
+    this.reefLabel.setText(`PALE REACHES · LANTERNS ${Math.min(lit, 5)}/5`);
+
+    // Chapel brazier follows chapel-steps condition.
+    const chapel = w.locationState["chapel-steps"] ?? "sound";
+    this.chapelFlame.setFillStyle(chapel === "lost" ? 0x4a4360 : chapel === "strained" ? 0xf4a261 : 0xff9a3c);
+    this.chapelLabel.setText(
+      chapel === "lost" ? "CHAPEL STEPS · DARK" : chapel === "strained" ? "CHAPEL STEPS · FLICKERING" : "CHAPEL STEPS",
+    );
+
+    const shieldOn = Date.now() < w.keepShieldUntil;
+    this.shieldBubble.setVisible(shieldOn);
+    this.shieldText.setVisible(shieldOn);
+    // P1D: persistent keeper pose follows the ward (idle otherwise).
+    this.keeperShieldOn = shieldOn;
+    this.playKeeper(resolveKeeperPose(shieldOn));
   }
 
   // ---------- effects (one per processed result) ----------
 
   playResult(r: GameResult): void {
+    // Addendum: reduced motion replaces transient movement with immediate
+    // static distinct states (same state changes, text + symbol, no tween /
+    // shake / flash / particles). Normal motion below is unchanged.
     if (this.reducedMotion) {
-      // Reduced motion: state still updates via syncWorld; skip shake/flash.
-      if (r.visual.hitEnemy) this.burst(1400, 690, 0xffd166);
+      const oneShot = resolveKeeperOneShot(r.visual);
+      if (oneShot) this.playKeeper(oneShot);
+      if (r.visual.hitEnemy) {
+        const p = this.hitAnchor();
+        this.showImpactStatic(p.x, p.y, "✖ HIT");
+      }
+      if (r.visual.healHero) {
+        const p = this.healAnchor();
+        this.showHealStatic(p.x, p.y);
+      }
+      if (r.visual.shieldKeep) {
+        // Persistent ward indicator (syncWorld owns visibility); static beam.
+        this.shieldBubble.setVisible(true);
+        this.shieldText.setVisible(true);
+        this.beam.setVisible(true);
+        this.beam.setAlpha(0.24);
+      }
+      if (r.visual.spawnElite || r.visual.spawnWave) {
+        // Arrival: enemy appears immediately at full scale with readable
+        // label (syncWorld already sets label/HP); no growth or flash.
+        this.vessel.setScale(1);
+      }
+      if (r.visual.discovery) {
+        const p = this.reefAnchor();
+        this.showImpactStatic(p.x, p.y, "◆ CHARTED");
+      }
+      if (r.visual.majorStory) {
+        const p = this.storyAnchor();
+        this.showImpactStatic(p.x, p.y, "✦ STORY");
+      }
+      if (r.visual.hitHero) {
+        const p = this.healAnchor();
+        this.showImpactStatic(p.x, p.y, "✖ HIT");
+      }
       return;
     }
+    // P1D: one-shot keeper action for this result (no-op without atlas).
+    const oneShot = resolveKeeperOneShot(r.visual);
+    if (oneShot) this.playKeeper(oneShot);
     if (r.visual.shake) this.cameras.main.shake(180, 0.006);
     if (r.visual.hitEnemy) {
-      this.flash(this.enemyBody, 0xffffff);
-      this.tweens.add({ targets: this.enemy, x: "+=18", duration: 70, yoyo: true, repeat: 3 });
-      this.burst(1400, 690, 0xffd166);
+      this.flash(this.vesselBody, 0xffffff);
+      this.tweens.add({ targets: this.vessel, x: "+=18", duration: 70, yoyo: true, repeat: 3 });
+      const p = this.hitAnchor();
+      this.burst(p.x, p.y, 0xffd166);
     }
     if (r.visual.healHero) {
-      this.burst(830, 700, 0x43ff9a);
-      this.tweens.add({ targets: this.hero, scale: 1.12, duration: 160, yoyo: true });
+      const p = this.healAnchor();
+      this.burst(p.x, p.y + 20, 0x43ff9a);
+      this.tweens.add({ targets: this.hero, scale: 1.1, duration: 160, yoyo: true });
+      this.tweens.add({ targets: this.skiffLantern, scale: 1.8, duration: 220, yoyo: true });
     }
     if (r.visual.shieldKeep) {
       this.shieldBubble.setVisible(true);
-      this.shieldText.setVisible(true).setText("🛡 WARD UP");
+      this.shieldText.setVisible(true);
+      this.beam.setAlpha(0.24);
+      this.time.delayedCall(900, () => this.beam.setAlpha(0.13));
     }
     if (r.visual.spawnElite || r.visual.spawnWave) {
-      this.enemy.setScale(0.2);
-      this.tweens.add({ targets: this.enemy, scale: 1, duration: 500, ease: "Back.easeOut" });
-      this.burst(1400, 690, 0xff0054);
+      this.vessel.setScale(0.25);
+      this.tweens.add({ targets: this.vessel, scale: 1, duration: 520, ease: "Back.easeOut" });
+      const p = this.hitAnchor();
+      this.burst(p.x, p.y, 0xff0054);
+      this.cameras.main.flash(220, 230, 57, 70);
     }
-    if (r.visual.discovery) this.burst(1000, 500, 0x90e0ef);
+    if (r.visual.discovery) {
+      const p = this.reefAnchor();
+      this.burst(p.x, p.y, 0x90e0ef);
+    }
     if (r.visual.majorStory) {
       this.cameras.main.flash(300, 255, 209, 102);
-      this.burst(960, 400, 0xffd166);
+      const p = this.storyAnchor();
+      this.burst(p.x, p.y, 0xffd166);
     }
-    if (r.visual.hitHero) this.flash(this.hero.getAt(0) as Phaser.GameObjects.Arc, 0xff0000);
+    if (r.visual.hitHero) {
+      if (this.keeperSprite && this.keeperSprite.visible) {
+        this.keeperSprite.setTintFill(0xff0000);
+        const sprite = this.keeperSprite;
+        this.time.delayedCall(120, () => sprite.clearTint());
+      } else if (this.keeperFlashPrimitive) {
+        this.flash(this.keeperFlashPrimitive, 0xff0000);
+      }
+    }
+  }
+
+  // ---------- builders ----------
+
+  private buildSky(): void {
+    const WW = this.WW;
+    const HZ = this.HZ;
+    const P = this.isPortrait;
+    const bg = this.add.graphics().setDepth(0);
+    bg.fillGradientStyle(0x0d0a1a, 0x0d0a1a, 0x2a1a4d, 0x16324a, 1);
+    bg.fillRect(0, 0, WW, HZ + 2);
+    // Storm bands.
+    bg.fillStyle(0x1a1033, 0.85);
+    if (P) bg.fillEllipse(300, 220, 700, 150);
+    else bg.fillEllipse(420, 240, 900, 150);
+    bg.fillStyle(0x241640, 0.9);
+    if (P) bg.fillEllipse(700, 330, 700, 170);
+    else bg.fillEllipse(1250, 330, 1100, 170);
+
+    // Stars (deterministic scatter, upper sky only).
+    for (let i = 0; i < 80; i++) {
+      const x = hash01(i * 3 + 1) * WW;
+      const y = hash01(i * 7 + 2) * 360;
+      const a = 0.25 + hash01(i * 13 + 5) * 0.55;
+      this.add.circle(x, y, hash01(i + 9) > 0.8 ? 2.4 : 1.4, 0xf4efe4, a).setDepth(0);
+    }
+
+    // Moon + halo (portrait recentered to x~800 y180).
+    this.moon = this.add.container(P ? 800 : 1560, 175).setDepth(1);
+    const halo = this.add.circle(0, 0, 74, 0xf4efe4, 0.1);
+    this.moonDisc = this.add.circle(0, 0, 46, 0xf4efe4, 0.95);
+    const shade = this.add.circle(-14, -10, 40, 0x0d0a1a, 0.16);
+    this.moon.add([halo, this.moonDisc, shade]);
+
+    // Drifting storm clouds.
+    const cloudDefs: Array<[number, number, number, number]> = P
+      ? [
+          [250, 180, 400, 90],
+          [540, 260, 500, 110],
+          [850, 340, 380, 90],
+        ]
+      : [
+          [380, 150, 560, 110],
+          [1050, 220, 700, 130],
+          [1620, 300, 520, 110],
+        ];
+    for (const [x, y, cw, ch] of cloudDefs) {
+      const c = this.add.ellipse(x, y, cw, ch, 0x141021, 0.88).setDepth(1);
+      this.clouds.push(c);
+      if (!this.reducedMotion) {
+        this.tweens.add({ targets: c, x: x + 46, duration: 9000 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      }
+    }
+
+    // Distant drowned silhouettes on the horizon.
+    const far = this.add.graphics().setDepth(1);
+    far.fillStyle(0x1c1440, 1);
+    if (P) {
+      far.fillEllipse(400, HZ + 6, 500, 120);
+      far.fillEllipse(800, HZ + 8, 500, 130);
+      far.fillStyle(0x141021, 1);
+      far.fillTriangle(340, HZ, 400, HZ - 110, 460, HZ);
+      far.fillTriangle(740, HZ, 815, HZ - 130, 890, HZ);
+    } else {
+      far.fillEllipse(760, HORIZON + 6, 620, 120);
+      far.fillEllipse(1560, HORIZON + 8, 700, 130);
+      far.fillStyle(0x141021, 1);
+      far.fillTriangle(700, HORIZON, 760, HORIZON - 110, 820, HORIZON);
+      far.fillTriangle(1500, HORIZON, 1575, HORIZON - 130, 1650, HORIZON);
+    }
+
+    // State-driven sky pressure tint (alpha set in syncWorld).
+    this.skyTint = this.add.rectangle(0, 0, WW, HZ).setOrigin(0, 0).setDepth(2);
+    this.skyTint.setFillStyle(0xe63946, 0);
+  }
+
+  private buildSea(): void {
+    const WW = this.WW;
+    const WH = this.WH;
+    const HZ = this.HZ;
+    const P = this.isPortrait;
+    const sea = this.add.graphics().setDepth(1);
+    sea.fillGradientStyle(0x16324a, 0x16324a, 0x0b1626, 0x0b1626, 1);
+    sea.fillRect(0, HZ, WW, WH - HZ);
+    // Moon road.
+    sea.fillStyle(0xf4efe4, 0.07);
+    if (P) {
+      sea.fillTriangle(520, HZ, 640, HZ, 740, WH);
+      sea.fillTriangle(520, HZ, 740, WH, 420, WH);
+    } else {
+      sea.fillTriangle(1500, HORIZON, 1620, HORIZON, 1720, H);
+      sea.fillTriangle(1500, HORIZON, 1720, H, 1400, H);
+    }
+    // Horizon glow line.
+    sea.lineStyle(2, 0xffd166, 0.28);
+    sea.lineBetween(0, HZ, WW, HZ);
+    this.waves = this.add.graphics().setDepth(2);
+    this.drawWaves();
+  }
+
+  private drawWaves(): void {
+    const g = this.waves;
+    if (!g) return;
+    const WW = this.WW;
+    const HZ = this.HZ;
+    g.clear();
+    for (let row = 0; row < 4; row++) {
+      const yBase = HZ + 70 + row * 90;
+      const amp = (5 + row * 4) * this.chop;
+      g.lineStyle(2, row === 0 ? 0x90e0ef : 0x3d5a80, row === 0 ? 0.5 : 0.32);
+      g.beginPath();
+      for (let x = 0; x <= WW; x += 30) {
+        const y = yBase + Math.sin(x * 0.008 + this.wavePhase * (1 + row * 0.22) + row * 1.7) * amp;
+        if (x === 0) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.strokePath();
+    }
+  }
+
+  private buildCinderholm(): void {
+    const P = this.isPortrait;
+    // Island center: landscape (300,760) / portrait (540,560) upper-third.
+    const icx = P ? 540 : 300;
+    const icy = P ? 560 : 760;
+    // Island rock + cliffs.
+    const rock = this.add.graphics().setDepth(2);
+    rock.fillStyle(0x1c2233, 1);
+    rock.fillEllipse(icx, icy, 560, 210);
+    rock.fillStyle(0x2b3448, 1);
+    rock.fillEllipse(P ? 520 : 280, P ? 530 : 730, 460, 150);
+    rock.lineStyle(3, 0x90e0ef, 0.22);
+    rock.strokeEllipse(icx, icy, 560, 210);
+
+    // Keep walls + lighthouse tower (the lantern anchor).
+    const keep = this.add.graphics().setDepth(3);
+    if (P) {
+      keep.fillStyle(0x3a4358, 1); // curtain wall
+      keep.fillRect(440, 500, 200, 130);
+      keep.fillStyle(0x8d99ae, 1); // tower
+      keep.fillRect(485, 290, 110, 260);
+      keep.fillStyle(0x6c757d, 1); // gallery trim
+      keep.fillRect(475, 270, 130, 26);
+      keep.fillStyle(0x2b2d42, 1); // gate
+      keep.fillRect(516, 560, 48, 70);
+      // Crenellations.
+      keep.fillStyle(0x8d99ae, 1);
+      for (let i = 0; i < 4; i++) keep.fillRect(448 + i * 52, 478, 30, 24);
+      // Tower window slits.
+      keep.fillStyle(0x1a1033, 1);
+      keep.fillRect(532, 330, 16, 40);
+      keep.fillRect(532, 400, 16, 40);
+      // Lantern room glass.
+      keep.fillStyle(0x90e0ef, 0.85);
+      keep.fillRect(492, 232, 96, 40);
+    } else {
+      keep.fillStyle(0x3a4358, 1); // curtain wall
+      keep.fillRect(120, 640, 200, 130);
+      keep.fillStyle(0x8d99ae, 1); // tower
+      keep.fillRect(245, 430, 110, 260);
+      keep.fillStyle(0x6c757d, 1); // gallery trim
+      keep.fillRect(235, 410, 130, 26);
+      keep.fillStyle(0x2b2d42, 1); // gate
+      keep.fillRect(196, 700, 48, 70);
+      // Crenellations.
+      keep.fillStyle(0x8d99ae, 1);
+      for (let i = 0; i < 4; i++) keep.fillRect(128 + i * 52, 618, 30, 24);
+      // Tower window slits.
+      keep.fillStyle(0x1a1033, 1);
+      keep.fillRect(292, 470, 16, 40);
+      keep.fillRect(292, 540, 16, 40);
+      // Lantern room glass.
+      keep.fillStyle(0x90e0ef, 0.85);
+      keep.fillRect(252, 372, 96, 40);
+    }
+
+    // Light beam (alpha pulsed in sync/effects; static under reduced motion).
+    // Landscape sweeps to x1150; portrait shortens inward to x~800 (in-frame).
+    const lampX = P ? 540 : 300;
+    const lampY = P ? 252 : 392;
+    this.beam = this.add.graphics().setDepth(2);
+    this.beam.fillStyle(0xffd166, 1);
+    if (P) {
+      this.beam.fillTriangle(540, 240, 540, 264, 800, 200);
+      this.beam.fillTriangle(540, 240, 540, 264, 800, 320);
+    } else {
+      this.beam.fillTriangle(350, 380, 350, 404, 1150, 300);
+      this.beam.fillTriangle(350, 380, 350, 404, 1150, 484);
+    }
+    this.beam.setAlpha(0.13);
+
+    this.lampGlow = this.add.circle(lampX, lampY, 46, 0xffd166, 0.28).setDepth(4);
+    this.lampCore = this.add.circle(lampX, lampY, 15, 0xffd166, 1).setDepth(5);
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.lampGlow, scale: 1.25, alpha: 0.16, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+
+    const shieldPos = P ? { x: 540, y: 420 } : { x: 300, y: 560 };
+    this.shieldBubble = this.add.circle(shieldPos.x, shieldPos.y, P ? 180 : 235, 0x90e0ef, 0.14).setVisible(false).setDepth(6);
+    this.shieldText = this.add
+      .text(P ? 540 : 300, P ? 216 : 356, "WARD UP", { fontSize: P ? "30px" : "24px", color: "#90e0ef", fontStyle: "bold" })
+      .setOrigin(0.5, 1)
+      .setVisible(false)
+      .setDepth(7);
+
+    this.keepBar = this.add.graphics().setDepth(7);
+    this.keepLabel = this.add
+      .text(P ? 540 : 435, P ? 670 : 700, "CINDERHOLM", { fontSize: P ? "32px" : "26px", color: "#edf2f4", fontStyle: "bold" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+    this.keepHpText = this.add
+      .text(P ? 540 : 435, P ? 702 : 730, "", { fontSize: P ? "28px" : "22px", color: "#b9b3c7" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+  }
+
+  // ---------- P1D keeper sprite (atlas-gated, primitives = fallback) ----------
+
+  /**
+   * Keeper sprite vertical offset inside the hero container.
+   * Container origin is (720, 800); the spec feet anchor is (720, 834),
+   * matching the primitive cloak bottom (r34) and the skiff hull top
+   * (y=838). Chosen by rendered geometry; see the P1D A/B record.
+   */
+  private keeperSpriteDY(): number {
+    return 34;
+  }
+
+  private setupKeeperSprite(): void {
+    try {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("noatlas") === "1") return; // explicit fallback test
+      }
+    } catch {
+      return;
+    }
+    if (!this.textures.exists(KEEPER_ATLAS_KEY)) return;
+    const tex = this.textures.get(KEEPER_ATLAS_KEY);
+    for (const f of allKeeperFrames()) {
+      if (!tex.has(f)) return; // incomplete atlas -> primitives stay
+    }
+    try {
+      this.registerKeeperAnims();
+      const sprite = this.add.sprite(0, this.keeperSpriteDY(), KEEPER_ATLAS_KEY, keeperFrame("idle", 0));
+      sprite.setOrigin(0.5, 1).setDepth(4);
+      this.hero.add(sprite);
+      this.keeperSprite = sprite;
+      for (const p of this.keeperPrimitives) p.setVisible(false);
+      this.playKeeper("idle");
+      // P1F dev-only preview: `?keeperPreview=<pose>` locks one pose for
+      // motion observation (walk/interact have no gameplay trigger).
+      // Absent/invalid without the flag: keeperPreview stays null and
+      // playback below is byte-identical to production.
+      this.keeperPreview = resolveKeeperPreview(window.location.search);
+      if (this.keeperPreview) {
+        this.keeperAnim = null;
+        this.keeperOneShot = false;
+        this.playKeeper(this.keeperPreview);
+      }
+    } catch {
+      this.keeperSprite = null; // sprite creation failed -> primitives stay
+    }
+  }
+
+  private registerKeeperAnims(): void {
+    for (const pose of Object.keys(KEEPER_POSES) as KeeperPose[]) {
+      const key = keeperAnimKey(pose);
+      if (this.anims.exists(key)) continue; // never double-register
+      const def = KEEPER_POSES[pose];
+      this.anims.create({
+        key,
+        frames: this.anims.generateFrameNames(KEEPER_ATLAS_KEY, {
+          prefix: `keeper_${pose}_side_`,
+          start: 0,
+          end: def.frames - 1,
+          zeroPad: 2,
+        }),
+        frameRate: def.frameRate,
+        repeat: def.repeat,
+      });
+    }
+  }
+
+  private playKeeper(pose: KeeperPose): void {
+    const sprite = this.keeperSprite;
+    if (!sprite) return;
+    const key = keeperAnimKey(pose);
+    if (!this.anims.exists(key)) return;
+    // P1F dev-only preview lock: while `?keeperPreview=` is set, world
+    // sync and result effects must not steal the locked pose. No world
+    // state is read or written here — sprite playback only.
+    if (this.keeperPreview && pose !== this.keeperPreview) return;
+    if (this.keeperOneShot && sprite.anims.isPlaying && KEEPER_POSES[pose].oneShot === false) {
+      return; // let the one-shot finish before returning to persistent pose
+    }
+    if (!shouldSwitchAnim(this.keeperAnim, key) && sprite.anims.isPlaying) return;
+    const def = KEEPER_POSES[pose];
+    this.keeperAnim = key;
+    if (this.reducedMotion) {
+      sprite.stop();
+      sprite.setTexture(KEEPER_ATLAS_KEY, keeperFrame(pose, 0));
+      this.keeperOneShot = false;
+      return;
+    }
+    this.keeperOneShot = def.oneShot;
+    sprite.play(key);
+    if (def.oneShot) {
+      sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE_KEY, () => {
+        this.keeperOneShot = false;
+        if (this.keeperPreview) {
+          // P1F dev-only preview: replay the locked pose so one-shots
+          // (strike/mend/interact) can be observed without gameplay.
+          this.keeperAnim = null;
+          this.playKeeper(this.keeperPreview);
+          return;
+        }
+        this.playKeeper(resolveKeeperPose(this.keeperShieldOn));
+      });
+    }
+  }
+
+  private buildSkiff(): void {
+    const P = this.isPortrait;
+    const skiff = P ? { x: 540, y: 900 } : { x: 720, y: 800 };
+    // Keeper skiff riding the swell.
+    const hull = this.add.graphics().setDepth(3);
+    hull.fillStyle(0x4a3728, 1);
+    if (P) {
+      hull.fillTriangle(430, 950, 650, 950, 610, 995);
+      hull.fillRect(440, 938, 200, 18);
+      hull.lineStyle(2, 0xffd166, 0.35);
+      hull.lineBetween(440, 938, 640, 938);
+    } else {
+      hull.fillTriangle(610, 850, 830, 850, 790, 895);
+      hull.fillRect(620, 838, 200, 18);
+      hull.lineStyle(2, 0xffd166, 0.35);
+      hull.lineBetween(620, 838, 820, 838);
+    }
+
+    this.hero = this.add.container(skiff.x, skiff.y).setDepth(4);
+    const cloak = this.add.circle(0, 0, 34, 0x43aa8b);
+    const hood = this.add.circle(0, -30, 18, 0x2d6a4f);
+    const helm = this.add.rectangle(0, -46, 44, 12, 0xf9c74f);
+    const oar = this.add.rectangle(44, 6, 56, 8, 0xe9ecef).setAngle(-22);
+    this.hero.add([cloak, hood, helm, oar]);
+    this.keeperPrimitives = [cloak, hood, helm, oar];
+    this.keeperFlashPrimitive = cloak;
+    this.setupKeeperSprite();
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.hero, y: skiff.y + 10, duration: 2200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    // Stern lantern (flares on heal).
+    const lanternPos = P ? { x: 598, y: 860 } : { x: 778, y: 760 };
+    const pole = this.add.rectangle(P ? 598 : 778, P ? 896 : 796, 6, 60, 0x6c757d).setDepth(4);
+    void pole;
+    this.skiffLantern = this.add.circle(lanternPos.x, lanternPos.y, 11, 0xffd166, 1).setDepth(5);
+    this.add.circle(lanternPos.x, lanternPos.y, 24, 0xffd166, 0.22).setDepth(4);
+
+    this.heroBar = this.add.graphics().setDepth(7);
+    this.add
+      .text(P ? 540 : 720, P ? 978 : 878, "KEEPER'S SKIFF", { fontSize: P ? "30px" : "24px", color: "#b7f7c9", fontStyle: "bold" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+    this.heroHpText = this.add
+      .text(P ? 540 : 720, P ? 1010 : 906, "", { fontSize: P ? "28px" : "22px", color: "#b9b3c7" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+  }
+
+  private buildReef(): void {
+    const P = this.isPortrait;
+    const rcx = P ? 540 : 1050;
+    const rcy = P ? 1240 : 940;
+    // Pale Reaches: low misty reef with five chart-lantern posts.
+    const reef = this.add.graphics().setDepth(2);
+    reef.fillStyle(0x232b3d, 1);
+    reef.fillEllipse(rcx, rcy, 560, 120);
+    reef.fillStyle(0x2e3a52, 1);
+    reef.fillEllipse(P ? 490 : 1000, P ? 1220 : 920, 380, 80);
+    // Mist.
+    reef.fillStyle(0xb9b3c7, 0.08);
+    reef.fillEllipse(rcx, P ? 1200 : 900, 620, 90);
+
+    this.reefLanterns = [];
+    for (let i = 0; i < 5; i++) {
+      const x = P ? 340 + i * 100 : 850 + i * 100;
+      const yBase = P ? 1184 : 884;
+      const yLamp = P ? 1150 : 850;
+      this.add.rectangle(x, yBase, 8, 56, 0x4a4360).setDepth(3);
+      const lamp = this.add.circle(x, yLamp, 12, 0x3a3454, 1).setDepth(4);
+      this.add.circle(x, yLamp, 24, 0xffd166, 0).setDepth(3);
+      this.reefLanterns.push(lamp);
+    }
+    this.reefLabel = this.add
+      .text(P ? 540 : 1050, P ? 1262 : 962, "", { fontSize: P ? "28px" : "22px", color: "#90e0ef" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+  }
+
+  private buildVessel(): void {
+    const P = this.isPortrait;
+    const home = P ? { x: 680, y: 720 } : { x: 1420, y: 780 };
+    // Gloam Vessel: siege hull offshore, gloam-lit.
+    this.vessel = this.add.container(home.x, home.y).setDepth(4);
+    this.vesselBody = this.add.rectangle(0, 0, 210, 84, 0x9d0208);
+    const prow = this.add.triangle(135, 0, 0, -42, 0, 42, 60, 0, 0x6a040f);
+    const rail = this.add.rectangle(0, -50, 190, 14, 0x370617);
+    const mast1 = this.add.rectangle(-50, -110, 12, 140, 0x2b2d42);
+    const mast2 = this.add.rectangle(55, -100, 12, 120, 0x2b2d42);
+    const sail1 = this.add.triangle(-50, -110, -70, 0, 70, 0, 0, -90, 0x1c1440);
+    const sail2 = this.add.triangle(55, -100, -58, 0, 58, 0, 0, -76, 0x241640);
+    this.vessel.add([this.vesselBody, prow, rail, mast1, mast2, sail1, sail2]);
+    this.vesselLights = [];
+    for (const [lx, ly] of [[-70, -12], [0, -8], [70, -12]] as Array<[number, number]>) {
+      const l = this.add.circle(lx, ly, 10, 0x80ffdb, 1);
+      this.vessel.add(l);
+      this.vesselLights.push(l);
+    }
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.vessel, y: home.y + 12, duration: 2600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      for (let i = 0; i < this.vesselLights.length; i++) {
+        this.tweens.add({ targets: this.vesselLights[i], alpha: 0.45, duration: 700 + i * 260, yoyo: true, repeat: -1 });
+      }
+    }
+    // Hull wake.
+    const wake = this.add.graphics().setDepth(3);
+    wake.lineStyle(2, 0x90e0ef, 0.3);
+    if (this.isPortrait) wake.lineBetween(550, 770, 810, 770);
+    else wake.lineBetween(1290, 830, 1550, 830);
+
+    this.vesselBar = this.add.graphics().setDepth(7);
+    this.vesselLabel = this.add
+      .text(this.isPortrait ? 680 : 1420, this.isPortrait ? 500 : 630, "", { fontSize: this.isPortrait ? "32px" : "26px", color: "#ff8fa3", fontStyle: "bold" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+    this.vesselHpText = this.add
+      .text(this.isPortrait ? 680 : 1420, this.isPortrait ? 534 : 660, "", { fontSize: this.isPortrait ? "28px" : "22px", color: "#b9b3c7" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+  }
+
+  private buildChapelBrazier(): void {
+    const P = this.isPortrait;
+    // Chapel Steps: stair cut into Cinderholm's flank + story brazier.
+    const steps = this.add.graphics().setDepth(3);
+    steps.fillStyle(0x4a4360, 1);
+    if (P) {
+      steps.fillRect(310, 1080, 90, 16);
+      steps.fillRect(320, 1064, 80, 16);
+      steps.fillRect(330, 1048, 70, 16);
+    } else {
+      steps.fillRect(470, 780, 90, 16);
+      steps.fillRect(480, 764, 80, 16);
+      steps.fillRect(490, 748, 70, 16);
+    }
+    this.add.rectangle(P ? 365 : 525, P ? 1026 : 726, 34, 22, 0x2b2d42).setDepth(3);
+    this.chapelFlame = this.add.circle(P ? 365 : 525, P ? 1006 : 706, 12, 0xff9a3c, 1).setDepth(4);
+    this.add.circle(P ? 365 : 525, P ? 1006 : 706, 24, 0xff9a3c, 0.2).setDepth(3);
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.chapelFlame, scale: 1.35, alpha: 0.75, duration: 620, yoyo: true, repeat: -1 });
+    }
+    this.chapelLabel = this.add
+      .text(P ? 365 : 525, P ? 1100 : 800, "CHAPEL STEPS", { fontSize: P ? "26px" : "20px", color: "#b9b3c7" })
+      .setOrigin(0.5, 0)
+      .setDepth(7);
+  }
+
+  private buildEyebrow(): void {
+    // Intentionally empty: titles and meters live in the DOM so the
+    // diorama never collides with the dashboard header or overlay HUD.
+    // Kept as a seam for future world-anchored chrome.
+  }
+
+  private buildStaticMarkers(): void {
+    // Addendum static equivalents: text + symbol, no color-alone, no motion.
+    // Hidden until a reduced-motion result shows them; syncWorld never hides
+    // the shield (persistent), impact/heal markers hide on a 3s timer (no tween).
+    this.impactGlyph = this.add.circle(0, 0, 18, 0x000000, 0.72).setDepth(9);
+    this.impactLabel = this.add
+      .text(0, -34, "✖ HIT", { fontSize: "22px", color: "#ff8fa3", fontStyle: "bold" })
+      .setOrigin(0.5, 0)
+      .setDepth(9);
+    this.impactMarker = this.add.container(0, 0, [this.impactGlyph, this.impactLabel]).setDepth(9).setVisible(false);
+
+    this.healGlyph = this.add.circle(0, 0, 18, 0x000000, 0.72).setDepth(9);
+    this.healLabel = this.add
+      .text(0, -34, "+ AID", { fontSize: "22px", color: "#43ff9a", fontStyle: "bold" })
+      .setOrigin(0.5, 0)
+      .setDepth(9);
+    this.healMarker = this.add.container(0, 0, [this.healGlyph, this.healLabel]).setDepth(9).setVisible(false);
+  }
+
+  private showImpactStatic(x: number, y: number, label: string): void {
+    if (!this.impactMarker) return;
+    this.impactLabel.setText(label);
+    this.impactMarker.setPosition(x, y).setVisible(true).setAlpha(1);
+    this.time.delayedCall(3000, () => {
+      if (this.impactMarker) this.impactMarker.setVisible(false);
+    });
+  }
+
+  private showHealStatic(x: number, y: number): void {
+    if (!this.healMarker) return;
+    this.healMarker.setPosition(x, y).setVisible(true).setAlpha(1);
+    this.time.delayedCall(3000, () => {
+      if (this.healMarker) this.healMarker.setVisible(false);
+    });
   }
 
   // ---------- helpers ----------
@@ -251,23 +924,10 @@ export class GameScene extends Phaser.Scene {
     color: number,
   ): void {
     g.clear();
-    g.fillStyle(0x000000, 0.55).fillRect(x, y, width, 22);
-    const frac = max > 0 ? Math.max(0, value / max) : 0;
-    g.fillStyle(color, 1).fillRect(x + 2, y + 2, (width - 4) * frac, 18);
+    g.fillStyle(0x000000, 0.6).fillRect(x, y, width, 20);
+    const frac = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+    g.fillStyle(color, 1).fillRect(x + 2, y + 2, (width - 4) * frac, 16);
   }
-
-  private drawThreat(level: number): void {
-    const g = this.threatBar;
-    g.clear();
-    g.fillStyle(0x000000, 0.55).fillRect(1560, 28, 300, 24);
-    g.fillStyle(level >= 70 ? 0xe63946 : 0xf4a261, 1).fillRect(1562, 30, 296 * (level / 100), 20);
-    if (!this.threatLabel) {
-      this.threatLabel = this.add.text(1560, 56, "", { fontSize: "24px", color: "#edf2f4" });
-    }
-    this.threatLabel.setText(`Threat ${level}/100`);
-  }
-
-  private threatLabel?: Phaser.GameObjects.Text;
 
   private flash(target: Phaser.GameObjects.Shape, color: number): void {
     const orig = (target as unknown as { fillColor: number }).fillColor;
@@ -276,14 +936,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private burst(x: number, y: number, tint: number): void {
-    this.add.particles(x, y, "px", {
-      lifespan: 500,
+    if (!this.textures.exists("px")) return;
+    const p = this.add.particles(x, y, "px", {
+      lifespan: 520,
       speed: { min: 80, max: 260 },
       scale: { min: 0.3, max: 0.9 },
       alpha: { start: 1, end: 0 },
       tint,
       quantity: 14,
       emitting: true,
-    }).explode(14, x, y);
+    });
+    p.setDepth(8);
+    p.explode(14, x, y);
+    this.time.delayedCall(1000, () => p.destroy());
   }
 }

@@ -56,6 +56,18 @@ export class YouTubeAdapter {
     this.stopped = true;
     this.reconnects = 0;
     this.diag = { seen: 0, commands: 0, paid: 0, retractions: 0, ignored: 0, polls: 0, apiErrors: 0 };
+    // T3 outbound announcements: delivery memory only (never gameplay).
+    // `outbound` is tri-state: unknown until the first insert proves the
+    // grant, ok after any accepted insert, insufficient after a scope
+    // rejection. A readonly-only (pre-T3) grant keeps working for reads;
+    // only sends fail closed as `insufficient-scope`.
+    this.outbound = "unknown";
+    /** eventId -> YouTube message id (or null); bounded, dedupes retries. */
+    this.delivered = new Map();
+    /** Epoch ms of insert attempts; rolling 60s window for throttling. */
+    this.sendTimes = [];
+    /** Serializes inserts so open-before-close ordering holds per chat. */
+    this.sendChain = Promise.resolve();
   }
 
   setStatus(s, error = null) {
@@ -77,6 +89,9 @@ export class YouTubeAdapter {
       discovery: this.lastDiscovery,
       cursor: this.cursor ? { liveChatId: this.cursor.liveChatId, platformId: this.cursor.platformId } : null,
       diag: { ...this.diag },
+      // Outbound announcement capability (T3). Counts only — no ids, no text.
+      outbound: this.outbound,
+      deliveredAnnouncements: this.delivered.size,
     };
   }
 
@@ -150,12 +165,14 @@ export class YouTubeAdapter {
     }
     this.tokens = fresh;
     await saveTokens(this.tokenPath, fresh);
+    this.outbound = "unknown"; // new grant: unproven until the first insert
     this.setStatus(STATUS.CONNECTED);
   }
 
   async logout() {
     this.disconnect();
     this.tokens = null;
+    this.outbound = "unknown";
     await clearTokens(this.tokenPath);
     this.setStatus(this.client ? STATUS.AUTH_REQUIRED : STATUS.DISCONNECTED);
   }
@@ -391,6 +408,137 @@ export class YouTubeAdapter {
       this.diag.apiErrors += 1;
       this.onApiFailure(e);
     }
+  }
+
+  // ------------------------------------------------------------------
+  // T3 outbound announcements: one insert per vote event.
+  //
+  // Contract (server side, never the browser):
+  // - validate text (1..200 chars) and a safe event identity;
+  // - require an authenticated token AND a connected live chat;
+  // - dedupe by eventId (retries reuse the identity; already-delivered
+  //   reports success with `duplicate: true`, never a second insert);
+  // - throttle inserts per rolling minute (quota guard);
+  // - serialize inserts so open-before-close ordering holds per chat;
+  // - ambiguous timeouts report `uncertain` and record NOTHING — the
+  //   operator reconciles (check chat) before any retry.
+  // Returns typed results only; tokens and Google bodies never leave.
+  // ------------------------------------------------------------------
+
+  pruneSendTimes(now) {
+    const cutoff = now - 60000;
+    while (this.sendTimes.length > 0 && this.sendTimes[0] < cutoff) this.sendTimes.shift();
+  }
+
+  markDelivered(eventId, messageId) {
+    this.delivered.set(eventId, messageId ?? null);
+    while (this.delivered.size > YT.maxDeliveredEvents) {
+      this.delivered.delete(this.delivered.keys().next().value);
+    }
+  }
+
+  async sendChatMessage({ text, eventId }) {
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return { ok: false, error: "invalid-text" };
+    }
+    if (Array.from(text).length > 200) return { ok: false, error: "too-long" };
+    if (typeof eventId !== "string" || !/^[A-Za-z0-9:_-]{1,128}$/.test(eventId)) {
+      return { ok: false, error: "invalid-event" };
+    }
+    if (!this.tokens) return { ok: false, error: "auth-required" };
+    if (this.stopped || !this.liveChatId) return { ok: false, error: "no-live-chat" };
+    if (this.delivered.has(eventId)) {
+      return { ok: true, duplicate: true, messageId: this.delivered.get(eventId) };
+    }
+    const run = this.sendChain.then(() => this.insertThrottled(text, eventId));
+    // A failed insert must not break the chain for later announcements.
+    this.sendChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  async insertThrottled(text, eventId) {
+    // Re-check under the lock: a concurrent retry may have delivered first.
+    if (this.delivered.has(eventId)) {
+      return { ok: true, duplicate: true, messageId: this.delivered.get(eventId) };
+    }
+    const now = Date.now();
+    this.pruneSendTimes(now);
+    if (this.sendTimes.length >= YT.maxSendsPerMinute) {
+      return { ok: false, error: "rate-limited" };
+    }
+    return this.insertMessage(text, eventId);
+  }
+
+  async insertMessage(text, eventId) {
+    let token;
+    try {
+      token = await this.accessToken();
+    } catch {
+      // accessToken() already moved status to AUTH_REQUIRED on failure.
+      return { ok: false, error: "auth-required" };
+    }
+    this.sendTimes.push(Date.now());
+    let res;
+    try {
+      res = await this.fetchImpl(`${API}/liveChat/messages?part=snippet`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          snippet: {
+            liveChatId: this.liveChatId,
+            type: "textMessageEvent",
+            textMessageDetails: { messageText: text },
+          },
+        }),
+        signal: AbortSignal.timeout(YT.sendTimeoutMs),
+      });
+    } catch (e) {
+      // Timeout: Google may or may not have accepted the message. Report
+      // `uncertain` and record nothing — blind retry could double-post.
+      if (e?.name === "AbortError") return { ok: false, error: "uncertain" };
+      this.diag.apiErrors += 1;
+      return { ok: false, error: "api-error" };
+    }
+    // Sanitized diagnostics: endpoint + status only, never tokens or bodies.
+    this.lastApi = { endpoint: "/liveChat/messages:insert", status: res.status, at: new Date().toISOString() };
+    if (res.status === 401) {
+      this.tokens = null;
+      this.setStatus(STATUS.AUTH_REQUIRED, "unauthorized");
+      return { ok: false, error: "auth-required" };
+    }
+    if (res.ok) {
+      let messageId = null;
+      try {
+        const data = await res.json();
+        messageId = typeof data?.id === "string" ? data.id : null;
+      } catch {
+        /* id is best-effort */
+      }
+      this.markDelivered(eventId, messageId);
+      this.outbound = "ok";
+      return { ok: true, messageId };
+    }
+    const body = await res.text().catch(() => "");
+    const detail = classifyError(body);
+    const hay = `${detail} ${body.slice(0, 300)}`;
+    this.diag.apiErrors += 1;
+    // Missing insert permission (readonly-only grant): fail closed and
+    // remember it so the dashboard can ask for re-consent.
+    if (res.status === 403 && /insufficient/i.test(hay)) {
+      this.outbound = "insufficient";
+      return { ok: false, error: "insufficient-scope" };
+    }
+    if (/quotaExceeded/i.test(detail)) return { ok: false, error: "quota-exceeded" };
+    if (res.status === 429 || /rateLimitExceeded|userRateLimitExceeded|rateLimit/i.test(detail)) {
+      return { ok: false, error: "rate-limited" };
+    }
+    if (["liveChatEnded", "liveChatDisabled", "liveChatNotFound"].includes(detail)) {
+      return { ok: false, error: "no-live-chat" };
+    }
+    return { ok: false, error: "api-error" };
   }
 
   onApiFailure(e) {

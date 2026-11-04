@@ -21,6 +21,12 @@
   --tb-line-strong: #3d2b63;
 }
 
+/* Phase 5H-D — viewer OBS overlay HUD (DOM over the Phaser canvas).
+   The game world is the dominant visual: rails are narrow, panels are
+   quiet and translucent, and memory content is capped so gameplay space
+   stays open. Read-only projection, transparent-friendly (root adds no
+   background of its own). Safe margins hold at 1920x1080. */
+
 .tb-hud {
   position: absolute;
   inset: 0;
@@ -30,69 +36,100 @@
 }
 
 .tb-hud .tb-panel {
-  background: var(--tb-panel);
+  background: var(--tb-panel-quiet);
   border: 1px solid var(--tb-line);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
-  padding: 12px 16px;
+  padding: 10px 14px;
 }
 
 /* ---- World eyebrow: deliberately quiet (level 4), the story leads ---- */
 .tb-topbar {
   position: absolute;
-  top: 16px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   text-align: center;
-  min-width: 480px;
-  padding: 8px 20px;
+  min-width: 0;
+  max-width: 900px;
+  padding: 6px 20px;
   background: var(--tb-panel-quiet);
+  white-space: nowrap;
 }
 .tb-topbar .tb-world {
-  font-size: 22px;
+  display: inline;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.24em;
   color: var(--tb-gold);
 }
-.tb-topbar .tb-arc { font-size: 14px; letter-spacing: 0.1em; color: var(--tb-ink); }
-.tb-topbar .tb-chapter { font-size: 13px; letter-spacing: 0.08em; color: var(--tb-teal); }
+.tb-live {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--tb-gold);
+  white-space: nowrap;
+}
+.tb-live-dot {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 10px;
+  color: var(--tb-red);
+  animation: tb-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tb-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+.tb-live-paused {
+  color: #0d0a1a;
+  background: var(--tb-gold);
+  border-radius: 20px;
+  padding: 1px 10px;
+}
+.tb-live-paused .tb-live-dot { display: none; }
+.tb-topbar .tb-arc { display: inline; font-size: 13px; letter-spacing: 0.08em; color: var(--tb-ink); margin-left: 12px; }
+.tb-topbar .tb-chapter { display: inline; font-size: 13px; letter-spacing: 0.06em; color: var(--tb-teal); margin-left: 12px; }
 .tb-topbar .tb-stream {
   display: inline-block;
-  margin-top: 4px;
+  margin-left: 12px;
   font-size: 11px;
   letter-spacing: 0.14em;
   color: var(--tb-dim);
   border: 1px solid var(--tb-line);
   border-radius: 20px;
-  padding: 2px 12px;
+  padding: 1px 10px;
 }
 
 .tb-left {
   position: absolute;
-  left: 24px;
-  top: 164px;
-  width: 300px;
+  left: 20px;
+  top: 120px;
+  width: 272px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .tb-right {
   position: absolute;
-  right: 24px;
-  top: 164px;
-  width: 384px;
+  right: 20px;
+  top: 120px;
+  width: 352px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 776px;
+  gap: 10px;
+  max-height: 824px;
   overflow: hidden;
 }
 .tb-bottom {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 14px;
-  max-width: 1240px;
+  bottom: 12px;
+  max-width: 1100px;
+  padding: 8px 16px;
 }
 
 .tb-kicker {
@@ -106,8 +143,8 @@
 .tb-story {
   border-left: 3px solid var(--tb-gold);
 }
-.tb-moment { font-size: 26px; line-height: 1.35; color: #fff3d6; }
-.tb-next { font-size: 15px; color: var(--tb-gold); margin-top: 8px; }
+.tb-moment { font-size: 23px; line-height: 1.32; color: #fff3d6; }
+.tb-next { font-size: 14px; color: var(--tb-gold); margin-top: 6px; }
 .tb-next .tb-next-label { color: var(--tb-dim); }
 
 .tb-stat { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 4px 0; }
@@ -135,13 +172,13 @@
 .tb-vote.dormant { opacity: 0.85; background: var(--tb-panel-quiet); }
 .tb-vote h3, .tb-meter h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.14em; color: var(--tb-gold); }
 .tb-vote .tb-decide { font-size: 12px; color: var(--tb-dim); margin-bottom: 2px; }
-.tb-vote .tb-prompt { font-size: 24px; line-height: 1.3; font-weight: 700; }
+.tb-vote .tb-prompt { font-size: 22px; line-height: 1.3; font-weight: 700; }
 .tb-vote .tb-opt {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 17px;
-  margin: 6px 0;
+  font-size: 16px;
+  margin: 5px 0;
   padding: 4px 0;
   border-top: 1px solid var(--tb-line);
 }
@@ -195,8 +232,38 @@
 .tb-meter.complete { border-color: var(--tb-green); }
 .tb-meter .tb-hint { font-size: 13px; color: var(--tb-dim); }
 
-/* ---- Level 3b — action becomes consequence ---- */
+/* ---- Level 3b — action becomes consequence (T4D authoritative feed) ---- */
+.tb-feed { overflow: hidden; }
 .tb-feed .tb-item { font-size: 14px; margin: 3px 0; }
+.tb-feed-item { margin: 3px 0; line-height: 1.3; animation: tb-feed-in 160ms ease-out; }
+.tb-feed-item .tb-feed-actor { font-size: 18px; font-weight: 700; color: var(--tb-ink); }
+.tb-feed-item .tb-feed-desc { font-size: 16px; color: var(--tb-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-feed-item .tb-others { color: var(--tb-gold); font-weight: 700; white-space: nowrap; }
+.tb-feed-item .tb-harm { color: var(--tb-rose); font-weight: 700; white-space: nowrap; }
+.tb-feed-muted, .tb-feed-cooldown { opacity: 0.7; }
+.tb-feed-more { font-size: 13px; color: var(--tb-dim); margin-top: 4px; }
+.tb-feed-empty { font-size: 16px; color: var(--tb-dim); }
+@keyframes tb-feed-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+/* ---- T4D event banner: single visible surface, transform-only entry ---- */
+.tb-banner-wrap {
+  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  width: 800px; max-width: calc(100% - 80px); z-index: 5; pointer-events: none;
+}
+.tb-banner {
+  background: rgba(10, 6, 24, 0.82); border: 1px solid var(--tb-gold);
+  border-radius: 10px; padding: 10px 18px; text-align: center;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  animation: tb-banner-in 180ms ease-out;
+}
+.tb-banner-title { font-size: 20px; font-weight: 700; color: var(--tb-ink); }
+.tb-banner-sub { font-size: 15px; color: var(--tb-dim); margin-top: 2px; }
+@keyframes tb-banner-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
 .tb-feed .tb-kind { font-size: 11px; letter-spacing: 0.12em; font-weight: 700; margin-right: 6px; }
 .tb-kind-action { color: var(--tb-dim); }
 .tb-kind-consequence { color: var(--tb-teal); }
@@ -204,9 +271,9 @@
 .tb-catalyst { font-size: 14px; color: var(--tb-gold); font-weight: 700; }
 
 /* ---- Level 4 — memory: the signature, quiet and persistent ---- */
-.tb-deeds .tb-deed { font-size: 13.5px; margin: 4px 0; color: var(--tb-ink); }
+.tb-deeds .tb-deed { font-size: 13px; margin: 3px 0; color: var(--tb-ink); }
 .tb-deeds .tb-deed::before { content: "✦ "; color: var(--tb-gold); }
-.tb-recap { font-size: 13.5px; color: var(--tb-dim); }
+.tb-recap { font-size: 13px; color: var(--tb-dim); max-height: 88px; overflow: hidden; }
 .tb-recap strong { color: var(--tb-ink); }
 
 .tb-vex { border-color: var(--tb-red); text-align: center; font-size: 16px; font-weight: 700; color: var(--tb-rose); }
@@ -217,18 +284,83 @@
   background: var(--tb-gold); border-radius: 8px; padding: 6px 22px;
 }
 
-/* ---- Level 2b — what the audience can do, grouped by meaning ---- */
-.tb-commands { display: flex; flex-direction: column; gap: 4px; }
-.tb-cmdgroup { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: 14px; }
+/* ---- Level 2b — what the audience can do, grouped by meaning ----
+   Single compact strip: the world behind it stays readable.
+   T4D: static authoritative cooldown durations (Ns), text (never color). */
+.tb-commands { display: flex; flex-direction: column; gap: 2px; }
+.tb-cmdgroup { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; font-size: 14px; white-space: nowrap; }
 .tb-cmdgroup .tb-grouplabel { font-size: 11px; letter-spacing: 0.14em; color: var(--tb-dim); min-width: 64px; }
 .tb-cmdgroup b { color: var(--tb-teal); font-variant-numeric: tabular-nums; }
 .tb-cmdgroup span { color: var(--tb-dim); }
-.tb-cmdhelp { font-size: 12px; color: var(--tb-faint); text-align: center; }
+.tb-cmdgroup .tb-cool { color: var(--tb-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tb-cmdhelp { font-size: 13px; color: var(--tb-faint); text-align: center; }
+
+/* ---- T4D HP chips: primary numeric health (tabular, never color-alone) ---- */
+.tb-hp { font-size: 16px; font-variant-numeric: tabular-nums; color: var(--tb-ink); margin: 4px 0; }
+.tb-hp-chip { font-weight: 700; white-space: nowrap; }
+.tb-hp-sep { color: var(--tb-dim); }
+.tb-hp-status { font-weight: 700; color: var(--tb-dim); white-space: nowrap; }
+.tb-premise { font-size: 14px; color: var(--tb-dim); margin-top: 6px; }
+.tb-threatline { font-size: 13px; color: var(--tb-dim); }
+.tb-hpwrap { margin-bottom: 6px; }
+.tb-banner-slot:empty { display: none; }
+
+/* ---- T4C portrait composition (1080×1920 ref, stacked, not scaled) ---- */
+.tb-portrait { font-size: 18px; }
+.tb-portrait .tb-panel { background: rgba(10, 6, 24, 0.82); }
+.tb-portrait .tb-topbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  transform: none; max-width: none;
+  padding: 12px 40px; white-space: normal; text-align: center;
+}
+.tb-portrait .tb-topbar .tb-world { font-size: 36px; letter-spacing: 0.2em; }
+.tb-portrait .tb-live { font-size: 16px; }
+.tb-portrait .tb-arc, .tb-portrait .tb-chapter { font-size: 16px; }
+.tb-portrait .tb-stream { font-size: 13px; }
+.tb-portrait .tb-pstack {
+  position: absolute; top: 96px; left: 40px; right: 40px; bottom: 0;
+  display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+}
+.tb-portrait .tb-story .tb-kicker { font-size: 13px; }
+.tb-portrait .tb-moment { font-size: 32px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-portrait .tb-next, .tb-portrait .tb-premise { font-size: 18px; }
+.tb-portrait .tb-worldwrap .tb-hp { font-size: 18px; }
+.tb-portrait .tb-threatline { font-size: 16px; }
+.tb-portrait .tb-vote h3, .tb-portrait .tb-meter h3 { font-size: 13px; }
+.tb-portrait .tb-vote .tb-decide { font-size: 13px; }
+.tb-portrait .tb-vote .tb-prompt { font-size: 30px; line-height: 1.25; }
+.tb-portrait .tb-vote .tb-opt { font-size: 24px; }
+.tb-portrait .tb-vote .tb-opt .tb-optkey { width: 36px; height: 36px; line-height: 36px; font-size: 18px; }
+.tb-portrait .tb-vote .tb-opt .cmd { font-size: 20px; }
+.tb-portrait .tb-vote .tb-opt .n { font-size: 22px; }
+.tb-portrait .tb-vote .tb-tally { font-size: 18px; }
+.tb-portrait .tb-vote .tb-verdict { font-size: 22px; }
+.tb-portrait .tb-vote .tb-clock { height: 10px; }
+.tb-portrait .tb-feed-item .tb-feed-actor { font-size: 20px; }
+.tb-portrait .tb-feed-item .tb-feed-desc { font-size: 18px; }
+.tb-portrait .tb-feed-more, .tb-portrait .tb-feed-empty { font-size: 18px; }
+.tb-portrait .tb-banner-slot {
+  /* T4E-F2: bottom-anchored over the empty-sea zone below the stack, so the
+     temporary banner never covers HP chips, the vote card, or commands.
+     Absolute (no flow impact, no layout shift); hold/priority unchanged;
+     reduced-motion swaps instantly per the existing media rule. */
+  position: absolute; bottom: 24px; left: 20px; right: 20px; z-index: 5; pointer-events: none;
+}
+.tb-portrait .tb-banner-slot:empty { display: none; }
+.tb-portrait .tb-banner-title { font-size: 24px; }
+.tb-portrait .tb-banner-sub { font-size: 17px; }
+.tb-portrait .tb-cmdgroup { font-size: 18px; }
+.tb-portrait .tb-cmdgroup .tb-grouplabel { font-size: 12px; }
+.tb-portrait .tb-cmdhelp { font-size: 15px; }
+.tb-portrait .tb-paused { top: 104px; }
+.tb-portrait .tb-bottom { position: relative; left: auto; transform: none; bottom: auto; max-width: none; }
+.tb-portrait .tb-vexwrap .tb-vex { font-size: 18px; }
 
 .tb-hud :is(a, button, [tabindex]):focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .tb-hud * { animation: none !important; transition: none !important; }
+  .tb-live-dot { animation: none !important; opacity: 1 !important; }
 }
 
 /* ---- Creator console (index.html) reuses the same tokens ---- */

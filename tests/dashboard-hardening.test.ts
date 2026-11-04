@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 const ROOT = join(__dirname, "..");
 const INDEX_HTML = readFileSync(join(ROOT, "index.html"), "utf8");
 const APP_TS = readFileSync(join(ROOT, "src", "app.ts"), "utf8");
+const MAIN_TS = readFileSync(join(ROOT, "src", "main.ts"), "utf8");
 const DOC = readFileSync(join(ROOT, "docs", "dashboard.md"), "utf8");
 
 const STYLE = INDEX_HTML.slice(INDEX_HTML.indexOf("<style>"), INDEX_HTML.indexOf("</style>"));
@@ -127,9 +128,12 @@ describe("UX-007A render performance", () => {
     expect(APP_TS).toContain("if (want !== lastGameTop)");
   });
 
-  it("three intervals, one Phaser init, no new dependencies", () => {
-    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(3);
-    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
+  it("one panel interval, one Phaser init, no new dependencies", () => {
+    // T4F-C1 migration: pump + canvas sync moved server-side; app.ts keeps
+    // the single panel refresh, src/main.ts owns the single preview game.
+    expect((APP_TS.match(/setInterval\(/g) ?? []).length).toBe(1);
+    expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
+    expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
     };

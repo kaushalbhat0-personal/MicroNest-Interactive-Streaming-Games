@@ -70,6 +70,12 @@ export interface RecoveryInput {
   source: "simulation" | "youtube";
   ytStatus: string;
   ytError?: string | null;
+  /**
+   * T3 outbound capability from the sidecar status (`unknown` | `ok` |
+   * `insufficient`). When the grant predates chat-posting permission, chat
+   * announcements fail closed and the operator must re-consent.
+   */
+  outbound?: string | null;
 }
 
 /**
@@ -81,6 +87,15 @@ export interface RecoveryInput {
 export function recoverySteps(i: RecoveryInput): string[] {
   if (i.source !== "youtube") {
     return ["Select YouTube Live as the input source above to begin setup."];
+  }
+  // T3: pre-outbound grants stay valid for reads; only announcements need
+  // the new permission. Say so explicitly instead of a generic reconnect.
+  if (i.outbound === "insufficient") {
+    return [
+      "Chat announcements need a new permission — press “1 · Authorize with Google” and approve the updated consent.",
+      "Reading chat keeps working with the existing grant; only posting needs re-consent.",
+      "Then press “2 · Connect to live chat”.",
+    ];
   }
   if (i.ytError === "sidecar-unreachable" || (i.ytStatus === "DISCONNECTED" && i.ytError)) {
     return [

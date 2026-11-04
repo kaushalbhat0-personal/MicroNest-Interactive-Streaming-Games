@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tidebound — Keeper Console</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23FFD166'/%3E%3C/svg%3E" />
     <style>
       /* 5H-C — keeper console: live command centre first, game preview
          prominent, operator actions in one rail, everything else behind
@@ -102,6 +103,17 @@
       #yt-note { margin-top: 4px; }
       .src-toggle { display: flex; gap: 12px; margin: 4px 0 8px; font-weight: 700; }
       .src-toggle label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+      /* T4E — overlay format selector. Native radios, visible selection
+         state, no animation (reduced-motion safe by construction). */
+      .fmt-toggle { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+      .fmt-toggle label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 10px 12px; border: 1px solid var(--tb-line); border-radius: 8px; margin: 0; }
+      .fmt-toggle label:has(input:checked) { border-color: var(--tb-gold); background: #2b2542; }
+      .fmt-toggle input[type="radio"] { width: auto; flex: 0 0 auto; margin-top: 4px; min-height: 24px; min-width: 24px; accent-color: var(--tb-gold); }
+      .fmt-toggle label strong { display: block; font-size: 15px; color: var(--tb-ink); }
+      .fmt-toggle label input:checked + span strong { color: var(--tb-gold); }
+      .fmt-toggle label .dim { display: block; font-size: 13px; margin-top: 2px; }
+      .st-setup { margin: 8px 0; padding-left: 22px; font-size: 14px; }
+      .st-setup li { padding: 3px 0; }
       .meterbar { height: 8px; border-radius: 5px; background: rgba(0,0,0,.55); overflow: hidden; margin: 6px 0; }
       .meterbar > i { display: block; height: 100%; background: var(--tb-teal); }
       #cc-m2-fill { background: var(--tb-gold); }
@@ -553,6 +565,34 @@
       <h2 class="tb-view-title" id="tb-h-settings">Settings</h2>
       <div class="st-grid">
         <div class="st-main">
+          <section class="card st-card" aria-labelledby="st-format-h">
+            <h2 id="st-format-h">Viewer overlay format</h2>
+            <div class="dim">Preview preference: which overlay page the preview buttons open. Both overlay URLs show the same live game from this console — opening either never restarts the stream session or resets the world. This never changes YouTube's broadcast resolution — match the OBS canvas below to the same format.</div>
+            <div class="fmt-toggle" role="radiogroup" aria-label="Viewer overlay format">
+              <label><input type="radio" name="overlay-format" id="st-format-landscape" value="landscape" checked /><span><strong>Landscape — 16:9 · 1920×1080</strong><span class="dim">Side rails, five activity rows, event banner over open water. The default.</span></span></label>
+              <label><input type="radio" name="overlay-format" id="st-format-portrait" value="portrait" /><span><strong>Portrait — 9:16 · 1080×1920</strong><span class="dim">Stacked panels, three activity rows, event banner slot. For vertical video.</span></span></label>
+            </div>
+            <div class="dim" id="st-format-done" role="status">Active overlay format: Landscape — 16:9 · 1920×1080</div>
+            <div class="btn-row">
+              <button class="ghost" id="st-format-open-landscape">Open landscape preview</button>
+              <button class="ghost" id="st-format-open-portrait">Open portrait preview</button>
+            </div>
+            <div class="dim">Previews open the real overlay page in a new tab — a separate page with its own game view, the same as an OBS source would load. A preview is rehearsal, not a live broadcast, and nothing here means OBS is connected.</div>
+          </section>
+          <section class="card st-card" aria-labelledby="st-auth-h">
+            <h2 id="st-auth-h">Authority connection</h2>
+            <div class="dim">The game now runs in the authority server process — this console holds no simulation. A dashboard refresh, navigation, or closure never resets the game; renderers keep following the server.</div>
+            <div class="dim" id="st-auth-lifecycle" role="status">Authority: checking…</div>
+            <label for="st-auth-token">Authority token (operator only — never share URLs carrying it)</label>
+            <input id="st-auth-token" type="password" autocomplete="off" placeholder="Paste once from the server console, then Save" />
+            <div class="btn-row">
+              <button class="ghost" id="st-auth-save">Save token</button>
+              <button class="ghost" id="st-auth-forget">Forget token</button>
+              <button class="ghost" id="st-auth-rotate">Rotate token</button>
+            </div>
+            <div class="dim" id="st-auth-status" role="status">Token status unknown.</div>
+            <div class="dim">The token travels only as an Authorization header to this server. Renderer pages never receive it and cannot change the game. Start the authority with <code>npm run authority-server</code> (first boot prints provisioning guidance, never the token itself).</div>
+          </section>
           <section class="card st-card" aria-labelledby="st-source-h">
             <h2 id="st-source-h">Input source</h2>
             <div class="src-toggle" role="radiogroup" aria-label="Input source">
@@ -600,6 +640,7 @@
                 <option>!defy</option>
                 <option>!voteA</option>
                 <option>!voteB</option>
+                <option>!voteC</option>
                 <option>!help</option>
               </select>
               <button class="primary" id="btn-command">Send Command</button>
@@ -642,6 +683,40 @@
               <button class="ghost" id="st-obs-copy">Copy URL</button>
             </div>
             <div class="dim" id="st-obs-done" role="status"></div>
+            <h3 class="st-sub">Portrait overlay URL — 1080 × 1920</h3>
+            <label for="st-obs-url-portrait">Portrait overlay URL (this server)</label>
+            <input id="st-obs-url-portrait" readonly value="" placeholder="Loading…" />
+            <div class="btn-row">
+              <button class="ghost" id="st-obs-copy-portrait">Copy portrait URL</button>
+            </div>
+            <div class="dim" id="st-obs-done-portrait" role="status"></div>
+            <h3 class="st-sub">Dual-output status — one game, two renderers</h3>
+            <div class="dim">Both overlay URLs above show the same authoritative game from this console. Copying a URL never configures OBS or YouTube on its own: add each URL as its own Browser Source, and delivering them to viewers stays a separate encoder step (not part of this prototype).</div>
+            <div class="dim" id="st-dual-rev" role="status">Authoritative revision: waiting for the first publish…</div>
+            <div class="dim" id="st-dual-landscape" role="status">Landscape renderer (1920×1080): no subscription seen yet</div>
+            <div class="dim" id="st-dual-portrait" role="status">Portrait renderer (1080×1920): no subscription seen yet</div>
+            <div class="dim" id="st-dual-transport" role="status">State transport: checking…</div>
+            <h3 class="st-sub">Dual-feed emission — YouTube Dual Stream (Encoder mode)</h3>
+            <div class="dim">Two Browser Sources in one scene do not create two YouTube feeds on their own: one OBS program output carries one feed. To emit both compositions, YouTube Studio Dual Stream is set to Encoder mode with two stream keys (horizontal + vertical, same broadcast, shared chat), and this machine encodes both feeds — for example with the free Aitum Vertical plugin (a second 1080×1920 canvas with its own streaming output) or a second portable OBS instance. Encoder mode cannot be added after the stream starts; verify both previews before going live. Auto mode (a YouTube-generated crop of the horizontal feed) remains the no-extra-encoder fallback. See docs/t4f-c2-delivery.md for the full startup and rehearsal checklist. Nothing here starts a broadcast.</div>
+            <h3 class="st-sub">Canvas and source dimensions</h3>
+            <div class="dim">Landscape: OBS canvas 1920×1080 (output 1920×1080 or 1280×720) · Browser Source 1920 wide × 1080 high. Portrait: OBS canvas 1080×1920 (output 1080×1920 or 720×1280) · Browser Source 1080 wide × 1920 high. Always use the URL whose dimensions match the canvas.</div>
+            <h3 class="st-sub">Setup sequence</h3>
+            <ol class="st-setup" id="st-setup-steps">
+              <li>Choose Landscape or Portrait in the format card above.</li>
+              <li>Copy the matching overlay URL here.</li>
+              <li>Set the OBS canvas resolution to match: 1920×1080 for landscape, 1080×1920 for portrait.</li>
+              <li>Add a Browser Source to the scene.</li>
+              <li>Enter the matching URL with its width and height.</li>
+              <li>Confirm transparency: the overlay ships with no background of its own.</li>
+              <li>Preview the overlay in a browser tab first.</li>
+              <li>Verify the OBS output resolution matches the canvas.</li>
+              <li>Start the broadcast only after everything above checks out.</li>
+            </ol>
+            <div class="dim">Menu labels may differ slightly between OBS versions.</div>
+            <h3 class="st-sub">Source behavior and troubleshooting</h3>
+            <div class="dim">Fit the source to the canvas with the source Transform controls (for example Fit to screen). Refresh the Browser Source to reload the overlay after updates — it resubscribes and catches up; the stream session is untouched. The “shutdown source when not visible” option frees resources but reloads the overlay when reshown. If the overlay stutters, check the browser-source hardware acceleration option in the OBS advanced settings. If text looks small, the canvas and source dimensions likely mismatch — recheck the numbers above. Audio routing is not managed by Tidebound; configure audio in OBS and YouTube directly.</div>
+            <h3 class="st-sub">Chat moderation boundary</h3>
+            <div class="dim">YouTube slow mode and subscriber-only chat are YouTube Studio settings — configure them there. Tidebound cannot change them: command cooldowns limit game actions, the event queue limits presentation volume, and the chat integration only reads messages and posts vote announcements. No extra moderation permissions were added.</div>
           </section>
           <section class="card st-card" aria-labelledby="st-diag-h">
             <h2 id="st-diag-h">Connection diagnostics · advanced</h2>

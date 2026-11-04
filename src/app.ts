@@ -1,25 +1,12 @@
-import Phaser from "phaser";
-import { tideboundGenesis, KINDLING_VOTE, ROUTE_VOTE, TIDEBOUND_LIBRARY } from "./content/tidebound";
+import { TIDEBOUND_LIBRARY } from "./content/tidebound";
 import { COMMANDS, QUEUE } from "./engine/config";
-import { GameEngine, makeEventId } from "./engine/engine";
-import { FeedAggregator } from "./engine/feed";
+import type { CanonicalEvent, GameResult, WorldState } from "./engine/types";
+import type { FeedEntry } from "./engine/feed";
 import { PAID_LEDGER_MAX_ENTRIES, ledgerStatus } from "./engine/ledger";
-import { WorldStore } from "./persistence/store";
-import { GameScene } from "./phaser/GameScene";
-import { YouTubeSource } from "./youtube/client";
-import {
-  castSessionVote,
-  openSessionVote,
-  type StreamSession,
-} from "./engine/lifecycle";
-import {
-  closeStreamAndFire,
-  closeVoteAndFire,
-  fireRite,
-  handleProcessedResult,
-  openStreamAndFire,
-  overrideVoteAndFire,
-} from "./runtime/progression";
+import type { WorldStore } from "./persistence/store";
+import type { GameScene } from "./phaser/GameScene";
+import type { YtStatus } from "./youtube/client";
+import type { StreamSession } from "./engine/lifecycle";
 import {
   beaconOilModel,
   commandGuide,
@@ -37,7 +24,8 @@ import {
   youtubeDisplayModel,
   type InputSource,
 } from "./presentation/tidebound-presentation";
-import { renderOverlay } from "./presentation/hud";
+import { activeFormatLine, getStoredFormat, overlayUrl, setStoredFormat } from "./dashboard/format";
+import type { BannerQueue, ViewerFeedStore } from "./presentation/viewer-feed";
 import { isEligibleTemplate, isRepeatEligible } from "./engine/templates";
 import { escapeHtml, initShell, syncShellStatus } from "./dashboard/shell";
 import {
@@ -82,32 +70,109 @@ import {
   queueLine,
   voteLine,
 } from "./dashboard/overview";
+import {
+  announceStatusLine,
+  closeEventId,
+  openEventId,
+  type AnnounceStatus,
+} from "./presentation/vote-announce";
+
+/**
+ * T4F-C1 read-only engine view. The GameEngine lives in the authority
+ * server process; the dashboard receives a structural view over the latest
+ * control-plane payload. Constructing a GameEngine here is forbidden
+ * (boundary test enforces it).
+ */
+export interface EngineView {
+  world: WorldState;
+  storyLog: string[];
+  recentResults: GameResult[];
+  queue: { readonly size: number; peekAll(): CanonicalEvent[] };
+}
+
+/** Read-only feed view over the latest control-plane payload. */
+export interface FeedView {
+  list(): FeedEntry[];
+}
+
+/** Ingest counters mirroring the authority's YouTubeSource diag. */
+export interface YtDiag {
+  received: number;
+  queued: number;
+  duplicate: number;
+  rejected: number;
+}
+
+/**
+ * T4F-C1 control-plane YouTube view. The single sidecar subscription is
+ * owned by the authority server; these methods POST control actions and
+ * read the server's status cache. Never an EventSource owner.
+ */
+export interface YtView {
+  lastStatus: YtStatus;
+  diag: YtDiag;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  refreshStatus(): Promise<YtStatus>;
+  connect(): Promise<void>;
+  disconnectServer(): Promise<void>;
+  authUrl(): Promise<string | null>;
+  onStatus(fn: (s: YtStatus) => void): () => void;
+}
 
 export interface Runtime {
-  engine: GameEngine;
-  feed: FeedAggregator;
+  engine: EngineView;
+  feed: FeedView;
+  /** T4D authoritative viewer feed (bounded, attributed, stable stamps). */
+  viewerFeed: ViewerFeedStore;
+  /** T4D single-visible event banner queue (bounded, priority, dedupe). */
+  banners: BannerQueue;
   store: WorldStore;
-  scene: GameScene;
-  yt: YouTubeSource;
+  /** Live scene when booted, else null (scenes boot async — never throws). */
+  readonly scene: GameScene | null;
+  yt: YtView;
   session: StreamSession;
   readonly paused: boolean;
-  sendCommand: (actorId: string, actorName: string, command: string) => string;
-  sendPaid: (actorId: string, actorName: string, amountMinor: number, currency: string) => string;
+  /**
+   * T3 outbound announcement delivery state, keyed by vote event id
+   * (`vote:<session>:<vote>:open|close`). Engine truth stays in
+   * `session`/`world`; this records only what chat was told. Never
+   * persisted (session ephemera, like the vote itself).
+   */
+  announce: Record<string, AnnounceState>;
+  sendCommand: (actorId: string, actorName: string, command: string) => Promise<string>;
+  sendPaid: (actorId: string, actorName: string, amountMinor: number, currency: string) => Promise<string>;
   save: () => Promise<void>;
   reload: () => Promise<void>;
   reset: () => Promise<void>;
-  pause: () => void;
-  resume: () => void;
-  openRouteVote: () => string;
-  openKindlingVote: () => string;
-  closeActiveVote: () => string;
-  overrideVote: (optionIndex: number) => string;
-  fireRite: (templateId: string) => string;
-  endStream: () => string;
+  pause: () => Promise<void>;
+  resume: () => Promise<void>;
+  openRouteVote: () => Promise<string>;
+  openKindlingVote: () => Promise<string>;
+  closeActiveVote: () => Promise<string>;
+  overrideVote: (optionIndex: number) => Promise<string>;
+  /**
+   * T3: retry a failed/uncertain/unconnected announcement with its stored
+   * text and original event identity. Never reopens or alters the vote.
+   */
+  retryAnnounce: (eventId: string) => Promise<void>;  fireRite: (templateId: string) => Promise<string>;
+  endStream: () => Promise<string>;
 }
 
-function commandKeys(): string[] {
-  return Object.keys(COMMANDS);
+/** T3 delivery record for one vote announcement (open or close). */
+export interface AnnounceState {
+  kind: "open" | "close";
+  status: AnnounceStatus;
+  /** Typed server reason for failed/uncertain states (never secrets). */
+  reason?: string;
+  /** Composed chat text (preview in simulation, retried verbatim). */
+  text?: string;
+  attempts: number;
+}
+
+/** T4F-C1: persistence source is fed by the authority control plane. */
+export function setPersistFrom(from: "file" | "local" | "none" | "file-error"): void {
+  persistFrom = from === "file-error" ? "none" : from;
 }
 
 // UX-003 persistence signal: last observed WorldStore destination. Recorded
@@ -138,318 +203,13 @@ let lastQueueSig: string | null = null;
 // UX-006 settings recovery diff cache: guidance rewrites only on change.
 let lastRecoverySig: string | null = null;
 
-/** Shared runtime: event ingestion → queue → engine → world/story → Phaser + HUD. */
-export async function createRuntime(opts: { withPanel: boolean }): Promise<Runtime> {
-  const params = new URLSearchParams(location.search);
-  const transparent = params.get("transparent") === "1";
-
-  const store = new WorldStore();
-  const feed = new FeedAggregator();
-  const engine = new GameEngine(
-    {
-      onResult: (r) => {
-        feed.push(r);
-        scene?.playResult(r);
-        // Single wiring point for collective story advancement (see
-        // handleProcessedResult): meters → assembly reaction (at most one
-        // vote firing on close) → ambient threshold reaction (at most one
-        // firing). Paid catalysts can trip thresholds but never touch votes
-        // or meters; world-internal noise advances nothing.
-        const h = handleProcessedResult(engine, runtime.session, r, TIDEBOUND_LIBRARY);
-        runtime.session = h.session;
-        refresh();
-      },
-    },
-    tideboundGenesis(),
-  );
-
-  // Restore persisted world BEFORE first render (never reset if a save exists).
-  const { state, from } = await store.load();
-  persistFrom = from;
-  if (state) {
-    engine.loadWorld(state);
-    engine.storyLog.unshift(`World restored (${from}). Tidebound remembers.`);
-  } else {
-    engine.loadWorld(tideboundGenesis());
-  }
-
-  // Session ephemera: one open stream per page lifetime. Never persisted.
-  // If the saved world is somehow unloadable as a session anchor, fall back
-  // to a genesis-anchored session rather than blocking the stream.
-  let session: StreamSession;
-  {
-    const opened = openStreamAndFire(engine.world, TIDEBOUND_LIBRARY);
-    if (opened.ok) {
-      engine.world = opened.world;
-      for (const d of opened.newDeeds) engine.pushStory(d);
-      session = opened.session;
-    } else {
-      engine.loadWorld(tideboundGenesis());
-      const retry = openStreamAndFire(engine.world, TIDEBOUND_LIBRARY);
-      if (!retry.ok) throw new Error("could not open stream session");
-      engine.world = retry.world;
-      for (const d of retry.newDeeds) engine.pushStory(d);
-      session = retry.session;
-    }
-  }
-
-  let paused = false;
-
-  const game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: "game",
-    width: 1920,
-    height: 1080,
-    transparent,
-    backgroundColor: transparent ? "rgba(0,0,0,0)" : "#1a1033",
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-    scene: [GameScene],
-  });
-  const scene = game.scene.getScene("game") as GameScene;
-
-  let saveTimer: ReturnType<typeof setTimeout> | undefined;
-  const scheduleAutosave = () => {
-    if (!opts.withPanel) return; // overlay never writes
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      void store.save(engine.world).then((r) => {
-        persistFrom = r;
-      });
-    }, 2000);
-  };
-
-  function refresh(): void {
-    // The HUD/panel must never depend on the canvas scene: a throttled or
-    // failed WebGL context must not blank the stream overlay or console.
-    if (scene.scene.isActive()) {
-      scene.syncWorld(engine.world, engine.storyLog, feed.list());
-    }
-    if (opts.withPanel) {
-      renderPanelState(runtime);
-    } else {
-      const el = document.getElementById("hud");
-      if (el) {
-        renderOverlay(el, {
-          world: engine.world,
-          session: runtime.session,
-          storyLog: engine.storyLog,
-          feed: feed.list(),
-          recent: engine.recentResults,
-          paused: runtime.paused,
-        });
-      }
-    }
-    scheduleAutosave();
-  }
-
-  // Main loop: pump queue + tick simulation — held while paused.
-  setInterval(() => {
-    if (runtime.paused) {
-      if (scene.scene.isActive()) {
-        scene.syncWorld(engine.world, engine.storyLog, feed.list());
-        if (!opts.withPanel) {
-          const el = document.getElementById("hud");
-          if (el) {
-            renderOverlay(el, {
-              world: engine.world,
-              session: runtime.session,
-              storyLog: engine.storyLog,
-              feed: feed.list(),
-              recent: engine.recentResults,
-              paused: true,
-            });
-          }
-        } else {
-          renderPanelState(runtime);
-        }
-      }
-      return;
-    }
-    const results = engine.pump();
-    const ticked = engine.tick();
-    if (results.length > 0 || ticked.length > 0) refresh();
-    else if (scene.scene.isActive()) {
-      scene.syncWorld(engine.world, engine.storyLog, feed.list());
-      if (!opts.withPanel) {
-        const el = document.getElementById("hud");
-        if (el) {
-          renderOverlay(el, {
-            world: engine.world,
-            session: runtime.session,
-            storyLog: engine.storyLog,
-            feed: feed.list(),
-            recent: engine.recentResults,
-            paused: false,
-          });
-        }
-      }
-    }
-  }, 250);
-
-  // Keep shield indicator accurate even between events.
-  setInterval(() => {
-    if (!runtime.paused && scene.scene.isActive()) scene.syncWorld(engine.world, engine.storyLog, feed.list());
-  }, 1000);
-
-  const runtime: Runtime = {
-    engine,
-    feed,
-    store,
-    scene,
-    yt: new YouTubeSource(engine),
-    session,
-    get paused() {
-      return paused;
-    },
-    sendCommand: (actorId, actorName, command) => {
-      const token = command.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
-      if (!commandKeys().includes(token)) return "rejected-invalid";
-      // Ballots ride alongside ingestion: latest vote wins per actor. Paid
-      // events never touch a vote (no amount parameter exists by design).
-      if ((token === "!votea" || token === "!voteb") && runtime.session.activeVote !== null) {
-        const idx = token === "!votea" ? 0 : 1;
-        const casted = castSessionVote(runtime.session, actorId, idx);
-        if (casted.ok) runtime.session = casted.session;
-      }
-      return engine.ingestCommand(actorId, actorName, token, makeEventId("cmd"));
-    },
-    sendPaid: (actorId, actorName, amountMinor, currency) =>
-      engine.ingestPaid(actorId, actorName, amountMinor, currency, makeEventId("paid")),
-    save: async () => {
-      persistFrom = await store.save(engine.world);
-      refreshPanel();
-    },
-    reload: async () => {
-      const loaded = await store.load();
-      persistFrom = loaded.from;
-      if (loaded.state) {
-        engine.loadWorld(loaded.state);
-        engine.storyLog.unshift(`World reloaded (${loaded.from}).`);
-        const opened = openStreamAndFire(engine.world, TIDEBOUND_LIBRARY);
-        if (opened.ok) {
-          engine.world = opened.world;
-          runtime.session = opened.session;
-          for (const d of opened.newDeeds) engine.pushStory(d);
-        }
-      }
-      refresh();
-      refreshPanel();
-    },
-    reset: async () => {
-      engine.loadWorld(tideboundGenesis());
-      const opened = openStreamAndFire(engine.world, TIDEBOUND_LIBRARY);
-      if (opened.ok) {
-        engine.world = opened.world;
-        runtime.session = opened.session;
-        for (const d of opened.newDeeds) engine.pushStory(d);
-      }
-      await store.save(engine.world).then((r) => {
-        persistFrom = r;
-      });
-      refresh();
-      refreshPanel();
-    },
-    pause: () => {
-      paused = true;
-      refresh();
-    },
-    resume: () => {
-      paused = false;
-      refresh();
-    },
-    openRouteVote: () => {
-      const r = openSessionVote(runtime.session, { ...ROUTE_VOTE, library: TIDEBOUND_LIBRARY });
-      if (!r.ok) return r.reason;
-      runtime.session = r.session;
-      refresh();
-      return "opened-route-vote";
-    },
-    openKindlingVote: () => {
-      const r = openSessionVote(runtime.session, { ...KINDLING_VOTE, library: TIDEBOUND_LIBRARY });
-      if (!r.ok) return r.reason;
-      runtime.session = r.session;
-      refresh();
-      return "opened-kindling-vote";
-    },
-    closeActiveVote: () => {
-      const r = closeVoteAndFire(runtime.session, engine.world, TIDEBOUND_LIBRARY);
-      runtime.session = r.session;
-      engine.world = r.world;
-      for (const d of r.newDeeds) engine.pushStory(d);
-      refresh();
-      if (!r.didClose) return r.reason ?? "closed-vote";
-      return r.fired ? `closed-vote:fired:${r.fired}` : `closed-vote:${r.reason ?? "no-winner"}`;
-    },
-    overrideVote: (optionIndex: number) => {
-      const r = overrideVoteAndFire(runtime.session, engine.world, TIDEBOUND_LIBRARY, optionIndex);
-      if (r.winner === null) return r.reason ?? "override-failed";
-      engine.world = r.world;
-      runtime.session = r.session;
-      for (const d of r.newDeeds) engine.pushStory(d);
-      refresh();
-      refreshPanel();
-      return r.fired ? `override:${r.winner}:fired` : `override:${r.winner}:no-fire:${r.reason ?? "unknown"}`;
-    },
-    fireRite: (templateId: string) => {
-      const r = fireRite(engine.world, TIDEBOUND_LIBRARY, templateId);
-      if (!r.ok) return r.reason ?? "rite-failed";
-      engine.world = r.world;
-      for (const d of r.newDeeds) engine.pushStory(d);
-      refresh();
-      refreshPanel();
-      return `rite-fired:${r.fired}`;
-    },
-    endStream: () => {
-      const f = closeStreamAndFire(engine.world, runtime.session, TIDEBOUND_LIBRARY);
-      if (!f.ok) return f.reason;
-      engine.world = f.world;
-      for (const d of f.newDeeds) engine.pushStory(d);
-      engine.loadWorld(engine.world);
-      const opened = openStreamAndFire(engine.world, TIDEBOUND_LIBRARY);
-      if (!opened.ok) return opened.reason;
-      engine.world = opened.world;
-      runtime.session = opened.session;
-      for (const d of opened.newDeeds) engine.pushStory(d);
-      void store.save(engine.world).then((r) => {
-        persistFrom = r;
-      });
-      refresh();
-      refreshPanel();
-      return `stream-closed:${f.world.streamCount}`;
-    },
-  };
-
-  if (opts.withPanel) wirePanel(runtime, refreshPanel);
-  else {
-    // Synchronous first paint: the overlay must show the world on load even
-    // if timers are throttled (background tab, OBS pre-load). Interval and
-    // ready/timeout refreshes keep it live afterwards.
-    const el = document.getElementById("hud");
-    if (el) {
-      renderOverlay(el, {
-        world: engine.world,
-        session: runtime.session,
-        storyLog: engine.storyLog,
-        feed: feed.list(),
-        recent: engine.recentResults,
-        paused: false,
-      });
-    }
-  }
-  // First paint once the scene is ready.
-  game.events.once("ready", refresh);
-  setTimeout(refresh, 800);
-  setTimeout(refresh, 2000);
-
-  function refreshPanel(): void {
-    if (opts.withPanel) renderPanelState(runtime);
-  }
-
-  return runtime;
-}
-
 // ---------------------------------------------------------------------------
 // Creator console (dev/creator page only — never in overlay/OBS).
+// T4F-C1: the dashboard is a server-backed control client. wirePanel and
+// renderPanelState are pure DOM over a Runtime view; the ServerRuntime
+// implementation lives in dashboard/server-runtime.ts (the only place
+// allowed to fetch the control API). This module constructs no engines,
+// queues, YouTube sources, or timers beyond the panel refresh.
 // ---------------------------------------------------------------------------
 
 function $(id: string): HTMLElement {
@@ -458,7 +218,7 @@ function $(id: string): HTMLElement {
   return el;
 }
 
-function wirePanel(rt: Runtime, refreshPanel: () => void): void {
+export function wirePanel(rt: Runtime, refreshPanel: () => void): void {
   // UX-002 shell: hash navigation + alert-dismiss delegation (idempotent,
   // once per page — never per runtime event, never re-creates Phaser/YT).
   initShell();
@@ -466,9 +226,12 @@ function wirePanel(rt: Runtime, refreshPanel: () => void): void {
     const name = ($("viewer-name") as HTMLInputElement).value.trim() || "Viewer1";
     const id = ($("viewer-id") as HTMLInputElement).value.trim() || name.toLowerCase();
     const cmd = ($("command") as HTMLSelectElement).value;
-    const outcome = rt.sendCommand(id, name, cmd);
-    flashOutcome(outcome);
-    refreshPanel();
+    // T4F-C1: control actions are confirmed by the authority server — the
+    // outcome is flashed only after the server answers (never fabricated).
+    void (async () => {
+      flashOutcome(await rt.sendCommand(id, name, cmd));
+      refreshPanel();
+    })();
   };
   ($("btn-paid") as HTMLButtonElement).onclick = () => {
     const name = ($("viewer-name") as HTMLInputElement).value.trim() || "Viewer1";
@@ -480,39 +243,54 @@ function wirePanel(rt: Runtime, refreshPanel: () => void): void {
       flashOutcome("rejected-invalid");
       return;
     }
-    const outcome = rt.sendPaid(id, name, Math.round(major * 100), "INR");
-    flashOutcome(outcome);
-    refreshPanel();
+    void (async () => {
+      flashOutcome(await rt.sendPaid(id, name, Math.round(major * 100), "INR"));
+      refreshPanel();
+    })();
   };
   // ---- Approved creator controls (safe boundary: no raw state mutation) ----
-  ($("btn-open-v1") as HTMLButtonElement).onclick = () => flashOutcome(rt.openRouteVote());
-  ($("btn-open-v2") as HTMLButtonElement).onclick = () => flashOutcome(rt.openKindlingVote());
-  ($("btn-close-vote") as HTMLButtonElement).onclick = () => flashOutcome(rt.closeActiveVote());
+  ($("btn-open-v1") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.openRouteVote()))();
+  ($("btn-open-v2") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.openKindlingVote()))();
+  ($("btn-close-vote") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.closeActiveVote()))();
+  // T3: announcement retry rides the stored event identity (never reopens
+  // or alters the vote). Delegated: the vote card re-renders every refresh.
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!(t instanceof HTMLElement)) return;
+    const btn = t.closest("[data-announce-retry]");
+    if (!(btn instanceof HTMLElement)) return;
+    const id = btn.getAttribute("data-announce-retry");
+    if (id) void rt.retryAnnounce(id);
+  });
   ($("btn-override-0") as HTMLButtonElement).onclick = (ev) => askOverride(rt, 0, ev);
   ($("btn-override-1") as HTMLButtonElement).onclick = (ev) => askOverride(rt, 1, ev);
   ($("btn-override-2") as HTMLButtonElement).onclick = (ev) => {
     askOverride(rt, 2, ev);
   };
-  ($("btn-rite-sable") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("sable-mending-rite"));
-  ($("btn-rite-tide") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("tide-prayer"));
-  ($("btn-rite-ilya") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("ilya-duel"));
-  ($("btn-rite-rekindle") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("cinderholm-rekindle"));
-  ($("btn-rite-rho") as HTMLButtonElement).onclick = () => flashOutcome(rt.fireRite("rho-plain-speech"));
+  ($("btn-rite-sable") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.fireRite("sable-mending-rite")))();
+  ($("btn-rite-tide") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.fireRite("tide-prayer")))();
+  ($("btn-rite-ilya") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.fireRite("ilya-duel")))();
+  ($("btn-rite-rekindle") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.fireRite("cinderholm-rekindle")))();
+  ($("btn-rite-rho") as HTMLButtonElement).onclick = () => void (async () => flashOutcome(await rt.fireRite("rho-plain-speech")))();
   ($("btn-pause") as HTMLButtonElement).onclick = () => {
-    rt.pause();
-    flashOutcome("runtime paused — incoming events held");
-    refreshPanel();
+    void (async () => {
+      await rt.pause();
+      flashOutcome("runtime paused — incoming events held");
+      refreshPanel();
+    })();
   };
   ($("btn-resume") as HTMLButtonElement).onclick = () => {
-    rt.resume();
-    flashOutcome("runtime resumed — events flowing");
-    refreshPanel();
+    void (async () => {
+      await rt.resume();
+      flashOutcome("runtime resumed — events flowing");
+      refreshPanel();
+    })();
   };
   ($("btn-save") as HTMLButtonElement).onclick = () => void rt.save();
   ($("btn-reload") as HTMLButtonElement).onclick = () => void rt.reload();
   ($("btn-end-stream") as HTMLButtonElement).onclick = (ev) => {
     const invoker = ev.currentTarget instanceof HTMLElement ? ev.currentTarget : null;
-    openConfirm(endStreamCopy(), () => flashOutcome(rt.endStream()), invoker);
+    openConfirm(endStreamCopy(), () => void (async () => flashOutcome(await rt.endStream()))(), invoker);
   };
   ($("btn-reset") as HTMLButtonElement).onclick = (ev) => {
     const invoker = ev.currentTarget instanceof HTMLElement ? ev.currentTarget : null;
@@ -521,12 +299,15 @@ function wirePanel(rt: Runtime, refreshPanel: () => void): void {
     }, invoker);
   };
   ($("btn-export") as HTMLButtonElement).onclick = () => rt.store.exportFile(rt.engine.world);
-  // ---- Input source: Simulation vs YouTube Live ----
+  // ---- Input source: Simulation vs YouTube Live (server-owned switch) ----
   const srcSim = $("src-sim") as HTMLInputElement;
   const srcYt = $("src-yt") as HTMLInputElement;
   const useYouTube = () => {
-    rt.yt.start();
-    void rt.yt.refreshStatus();
+    void (async () => {
+      await rt.yt.start();
+      await rt.yt.refreshStatus();
+      refreshPanel();
+    })();
   };
   srcSim.onchange = () => {
     if (srcSim.checked) rt.yt.stop();
@@ -645,17 +426,104 @@ function wirePanel(rt: Runtime, refreshPanel: () => void): void {
       }
     };
   }
+  // T4E: portrait overlay URL + format selection (wired once per page).
+  // The console keeps its single landscape game canvas; the selector only
+  // chooses which overlay page OBS loads. Switching loads the other overlay
+  // URL — a full overlay reload with the world save kept and the stream
+  // session restarting — never a second game here, never a world reset
+  // caused by a display choice.
+  try {
+    const pUrlEl = document.getElementById("st-obs-url-portrait");
+    if (pUrlEl instanceof HTMLInputElement) {
+      const pUrl = overlayUrl(typeof location !== "undefined" ? location.origin : "", "portrait");
+      pUrlEl.value = pUrl;
+      if (!pUrl) pUrlEl.placeholder = "Open overlay.html from this same server, then copy its address.";
+    }
+  } catch {
+    /* portrait url init must never break panel wiring */
+  }
+  const obsCopyP = document.getElementById("st-obs-copy-portrait");
+  if (obsCopyP instanceof HTMLButtonElement) {
+    obsCopyP.onclick = () => {
+      const done = document.getElementById("st-obs-done-portrait");
+      const say = (msg: string) => {
+        if (done) done.textContent = msg;
+      };
+      try {
+        const urlEl = document.getElementById("st-obs-url-portrait");
+        const url = urlEl instanceof HTMLInputElement ? urlEl.value : "";
+        if (!url) {
+          say("No URL yet — open overlay.html from this same server first.");
+          return;
+        }
+        const clip = (navigator as Navigator & { clipboard?: { writeText(t: string): Promise<void> } }).clipboard;
+        if (!clip) {
+          if (urlEl instanceof HTMLInputElement) urlEl.select();
+          say("Copy unavailable here — the URL is selected; copy it manually.");
+          return;
+        }
+        void clip.writeText(url).then(
+          () => say("Copied to clipboard."),
+          () => say("Copy failed — select the URL manually."),
+        );
+      } catch {
+        say("Copy failed — select the URL manually.");
+      }
+    };
+  }
+  const fmtLandscape = document.getElementById("st-format-landscape");
+  const fmtPortrait = document.getElementById("st-format-portrait");
+  const sayFormat = (f: "landscape" | "portrait") => {
+    const done = document.getElementById("st-format-done");
+    if (done) done.textContent = activeFormatLine(f);
+  };
+  try {
+    const stored = getStoredFormat();
+    if (fmtLandscape instanceof HTMLInputElement) fmtLandscape.checked = stored === "landscape";
+    if (fmtPortrait instanceof HTMLInputElement) fmtPortrait.checked = stored === "portrait";
+    sayFormat(stored);
+  } catch {
+    /* format restore must never break panel wiring */
+  }
+  const onFormatChange = () => {
+    const selected = fmtPortrait instanceof HTMLInputElement && fmtPortrait.checked ? ("portrait" as const) : ("landscape" as const);
+    setStoredFormat(selected);
+    sayFormat(selected);
+  };
+  // Source-radio switching stays assignment-based (the existing relocation
+  // test pins exactly two such handlers); the display-format preference
+  // below uses addEventListener so the input-source contract is untouched.
+  if (fmtLandscape instanceof HTMLInputElement) fmtLandscape.addEventListener("change", onFormatChange);
+  if (fmtPortrait instanceof HTMLInputElement) fmtPortrait.addEventListener("change", onFormatChange);
+  const openPreview = (format: "landscape" | "portrait") => {
+    const done = document.getElementById("st-format-done");
+    try {
+      const url = overlayUrl(typeof location !== "undefined" ? location.origin : "", format);
+      if (!url) {
+        if (done) done.textContent = "No URL yet — open overlay.html from this same server first.";
+        return;
+      }
+      const win = window.open(url, "_blank", "noopener");
+      if (!win && done) done.textContent = "Preview blocked — allow popups, or copy the URL from the OBS card below.";
+    } catch {
+      if (done) done.textContent = "Preview failed — copy the URL from the OBS card below.";
+    }
+  };
+  const openL = document.getElementById("st-format-open-landscape");
+  if (openL instanceof HTMLButtonElement) openL.onclick = () => openPreview("landscape");
+  const openP = document.getElementById("st-format-open-portrait");
+  if (openP instanceof HTMLButtonElement) openP.onclick = () => openPreview("portrait");
   rt.yt.onStatus(() => refreshPanel());
   setInterval(refreshPanel, 1000);
   // Static command guide (canonical vocabulary only, grouped by meaning).
   // Grouping is presentation-only: commandGuide() still returns the flat
-  // canonical 11 and the engine still accepts exactly those tokens.
+  // canonical 12 and the engine still accepts exactly those tokens.
   const guide = commandGuide(COMMANDS as unknown as Record<string, { does: string }>);
   const byCmd = new Map(guide.map((g) => [g.command, g.does]));
   const cmdGroups: Array<{ label: string; cmds: string[] }> = [
     { label: "Act", cmds: ["!strike", "!mend", "!shield", "!tribute", "!defy"] },
     { label: "Explore", cmds: ["!scout", "!ring", "!hide"] },
-    { label: "Decide", cmds: ["!voteA", "!voteB"] },
+    { label: "Decide", cmds: ["!voteA", "!voteB", "!voteC"] },
   ];
   ($("cc-commands") as HTMLElement).innerHTML =
     cmdGroups
@@ -736,7 +604,7 @@ function askOverride(rt: Runtime, optionIndex: number, ev: { currentTarget: unkn
   const invoker = ev.currentTarget instanceof HTMLElement ? ev.currentTarget : null;
   const options = voteModel(rt.session, rt.engine.world, TIDEBOUND_LIBRARY).options;
   const label = options[optionIndex]?.label ?? `option ${optionIndex + 1}`;
-  openConfirm(overrideCopy(label), () => flashOutcome(rt.overrideVote(optionIndex)), invoker);
+  openConfirm(overrideCopy(label), () => void (async () => flashOutcome(await rt.overrideVote(optionIndex)))(), invoker);
 }
 
 export function renderPanelState(rt: Runtime): void {
@@ -803,6 +671,39 @@ export function renderPanelState(rt: Runtime): void {
             ? `<div class="vote-verdict">The assembly chose <strong>${vote.winnerLabel}</strong>${vote.winnerReason ? ` (${vote.winnerReason})` : ""} — the deed enters the story below.</div>`
             : `<div class="vote-verdict">No winner — the tide stays its course${vote.winnerReason ? ` (${vote.winnerReason})` : ""}.</div>`
           : "");
+    }
+    // T3: announcement delivery is independent of the engine vote phase.
+    // The card never says "announced" unless YouTube confirmed the send;
+    // simulation shows the composed text as a rehearsal preview instead.
+    try {
+      const sid = rt.session.sessionId;
+      if (vote.id) {
+        const lines: string[] = [];
+        const show = (eventId: string, label: string) => {
+          const a = rt.announce[eventId];
+          if (!a) return;
+          lines.push(`<div class="dim">${label}: ${escapeHtml(announceStatusLine(a.status, a.reason ?? null))}</div>`);
+          if (a.status === "na-simulation" && a.text) {
+            lines.push(`<div class="dim">Chat preview (not sent): ${escapeHtml(a.text)}</div>`);
+          }
+          if (
+            (a.status === "failed" ||
+              a.status === "uncertain" ||
+              a.status === "not-connected" ||
+              a.status === "reauth-required") &&
+            a.text
+          ) {
+            lines.push(
+              `<div class="btn-row"><button class="ghost" data-announce-retry="${escapeHtml(eventId)}">Retry announcement</button></div>`,
+            );
+          }
+        };
+        show(openEventId(sid, vote.id), "Chat announcement (open)");
+        if (vote.phase === "closed") show(closeEventId(sid, vote.id), "Chat announcement (result)");
+        if (lines.length > 0) voteEl.innerHTML += lines.join("");
+      }
+    } catch {
+      /* announcement readout must never break the vote card */
     }
   }
   set("cc-m1", `${m1.title}: ${m1.current}/${m1.target} ${m1.unitText} — ${m1.status}. ${m1.hint}`);
@@ -872,6 +773,8 @@ export function renderPanelState(rt: Runtime): void {
   }
   const queueEl = document.getElementById("queue-list");
   if (queueEl) {
+    // T4D privacy: waiting-line amounts stay out of any surface that could
+    // be screen-captured (fiction only — keeper detail lives in diagnostics).
     queueEl.textContent =
       rt.engine.queue
         .peekAll()
@@ -879,7 +782,7 @@ export function renderPanelState(rt: Runtime): void {
           e.kind === "chat_command"
             ? `${e.actorName}: ${e.command}`
             : e.kind === "paid_event"
-              ? `${e.actorName}: paid ${e.amount}`
+              ? `${e.actorName}: paid catalyst`
               : `retraction noted: ${e.refPlatformId}`,
         )
         .join("\n") || "Queue empty — the world is caught up.";
@@ -1284,7 +1187,12 @@ export function renderPanelState(rt: Runtime): void {
       if (li) li.setAttribute("data-state", state);
     }
     setSt("st-source-line", sourceLine(settingsSource));
-    const rec = recoverySteps({ source: settingsSource, ytStatus: yts.status, ytError: yts.error ?? null });
+    const rec = recoverySteps({
+      source: settingsSource,
+      ytStatus: yts.status,
+      ytError: yts.error ?? null,
+      outbound: yts.outbound ?? null,
+    });
     const recSig = rec.join("\n");
     const recEl = document.getElementById("st-recovery");
     if (recEl instanceof HTMLElement && recSig !== lastRecoverySig) {
