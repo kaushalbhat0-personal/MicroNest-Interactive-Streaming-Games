@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tidebound — Keeper Console</title>
     <style>
+      /* 5H-C — keeper console: live command centre first, game preview
+         prominent, operator actions in one rail, everything else behind
+         disclosure elements. All runtime element IDs are unchanged. */
       :root {
         color-scheme: dark;
         --tb-ink: #f4efe4;
@@ -16,34 +19,62 @@
         --tb-rose: #ff8fa3;
         --tb-red: #e63946;
         --tb-green: #90be6d;
+        --tb-amber: #6b4e12;
         --tb-line: #3d2b63;
         --tb-hairline: rgba(185, 179, 199, 0.22);
+        --tb-top-h: 64px;
+        --tb-rail-w: 220px;
+        --tb-tabs-h: 60px;
       }
       * { box-sizing: border-box; }
       body { margin: 0; background: #0d0a1a; color: var(--tb-ink); font: 15px/1.5 system-ui, sans-serif; }
-      header { padding: 12px 20px; background: #1a1033; border-bottom: 1px solid var(--tb-line); display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
-      header h1 { margin: 0; font-size: 20px; font-weight: 700; color: var(--tb-gold); }
-      header p { margin: 2px 0 0; color: var(--tb-dim); font-size: 13px; }
-      #cc-status { display: inline-block; padding: 6px 16px; border-radius: 20px; font-weight: 700; background: #1d5c3f; color: #b7f7c9; min-height: 44px; line-height: 32px; font-size: 14px; }
+      /* ---- Top: live command centre (sticky) ---- */
+      .cc-top {
+        position: sticky; top: 0; z-index: 20;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+        min-height: var(--tb-top-h); padding: 8px 20px;
+        background: rgba(26, 16, 51, 0.97); border-bottom: 1px solid var(--tb-line);
+      }
+      .cc-brand { display: flex; align-items: center; gap: 12px; margin-right: 8px; }
+      .cc-lantern { width: 12px; height: 12px; border-radius: 50%; background: var(--tb-gold); box-shadow: 0 0 10px 2px rgba(255, 209, 102, 0.45); flex: 0 0 auto; }
+      .cc-brand h1 { margin: 0; font-size: 18px; font-weight: 700; color: var(--tb-gold); white-space: nowrap; }
+      .cc-brand p { margin: 0; color: var(--tb-dim); font-size: 12px; }
+      .cc-brand code { color: var(--tb-gold); }
+      .cc-live { display: flex; align-items: center; gap: 8px; }
+      #cc-status { display: inline-block; padding: 6px 16px; border-radius: 20px; font-weight: 700; background: #1d5c3f; color: #b7f7c9; font-size: 14px; white-space: nowrap; }
       #cc-status.paused { background: #6b4e12; color: var(--tb-gold); }
-      main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 440px); gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; }
-      #game canvas { width: 100% !important; height: auto !important; border: 1px solid var(--tb-line); border-radius: 12px; }
-      /* Operation groups: NOW · KEEPER ACTIONS · WORLD MEMORY · AUDIENCE · SYSTEM */
-      .cc-group { margin: 20px 0 8px; padding-top: 12px; border-top: 1px solid var(--tb-hairline); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; color: var(--tb-dim); }
-      .cc-group:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-      .cc-group .cc-why { font-weight: 400; color: var(--tb-faint); letter-spacing: 0; }
+      .cc-where { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; font-size: 13px; color: var(--tb-dim); }
+      /* ---- Layout: stage + operator rail + secondary ---- */
+      .cc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      /* ---- Main: game preview (stays in view while operating) ---- */
+      .cc-stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      #game { aspect-ratio: 16 / 9; width: 100%; background: #1a1033; border: 1px solid var(--tb-line); border-radius: 12px; overflow: hidden; position: relative; }
+      #game canvas { width: 100% !important; height: 100% !important; margin: 0 !important; display: block; border: 0; border-radius: 12px; }
+      @media (min-width: 1100px) {
+        #game { position: sticky; top: calc(var(--tb-top-h) + 12px); z-index: 5; }
+      }
+      .cc-logs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       .card { background: #171228; border: 1px solid var(--tb-line); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
       .card h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.08em; color: var(--tb-teal); }
       .card .big { font-size: 19px; font-weight: 700; color: var(--tb-gold); line-height: 1.35; }
       .card .dim { color: var(--tb-dim); font-size: 13px; }
       .stat-row { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+      /* ---- Secondary: full-width disclosure grid ---- */
+      .cc-second { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 4px; }
+      details.cc-drawer { background: #171228; border: 1px solid var(--tb-line); border-radius: 12px; padding: 8px 16px; }
+      details.cc-drawer > summary { cursor: pointer; font-weight: 700; font-size: 13px; letter-spacing: 0.06em; color: var(--tb-teal); min-height: 44px; display: flex; align-items: center; }
+      details.cc-drawer > summary .cc-why { font-weight: 400; color: var(--tb-faint); letter-spacing: 0; margin-left: 6px; }
+      details.rehearsal { border: 1px dashed var(--tb-line); border-radius: 8px; padding: 8px; }
+      details.rehearsal summary { cursor: pointer; font-weight: 700; color: var(--tb-dim); min-height: 44px; }
       label { display: block; margin: 8px 0 2px; color: var(--tb-dim); font-size: 12px; }
       input, select { width: 100%; padding: 10px 9px; border-radius: 8px; border: 1px solid var(--tb-line); background: #0d0a1a; color: var(--tb-ink); font-size: 15px; }
       .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
       .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
       .btn-row button { flex: 1 1 140px; }
       button { cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 700; margin-top: 8px; min-height: 44px; font-size: 15px; transition: background-color 120ms ease, border-color 120ms ease; }
-      button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible,
+      .tb-rail a:focus-visible, .tb-tabs a:focus-visible, .tb-alert a:focus-visible,
+      .tb-alert button:focus-visible, .skip:focus-visible, [tabindex="-1"]:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
       button:hover { filter: brightness(1.08); }
       .primary { background: var(--tb-gold); color: #231a06; width: 100%; }
       .paid { background: var(--tb-red); color: #fff; width: 100%; }
@@ -62,14 +93,12 @@
       #outcome { min-height: 22px; color: var(--tb-gold); font-weight: 700; }
       #outcome.flash { animation: pop .3s ease; }
       @keyframes pop { 50% { transform: scale(1.06); } }
-      #yt-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-weight: 700; background: #2b2542; }
+      #yt-status { display: inline-block; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-size: 13px; background: #2b2542; white-space: nowrap; }
       #yt-status[data-s="STREAMING"] { background: #1d5c3f; color: #b7f7c9; }
       #yt-status[data-s="RECONNECTING"], #yt-status[data-s="CONNECTING"], #yt-status[data-s="LIVE_CHAT_FOUND"] { background: #6b4e12; color: var(--tb-gold); }
       #yt-status[data-s="AUTH_REQUIRED"] { background: #6b4e12; color: var(--tb-gold); }
       #yt-status[data-s="ERROR"] { background: #6b1d1d; color: var(--tb-rose); }
       #yt-status[data-s="CONNECTED"], #yt-status[data-s="STREAM_ENDED"] { background: #2b2542; color: var(--tb-dim); }
-      .yt-block { margin: 8px 0; padding-top: 8px; border-top: 1px solid var(--tb-hairline); }
-      .yt-label { font-size: 12px; font-weight: 700; color: var(--tb-dim); margin-bottom: 4px; }
       #yt-note { margin-top: 4px; }
       .src-toggle { display: flex; gap: 12px; margin: 4px 0 8px; font-weight: 700; }
       .src-toggle label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -82,194 +111,568 @@
       #cc-commands h3:first-child { margin-top: 0; }
       #cc-commands div { padding: 3px 0; border-bottom: 1px solid #2b2542; font-size: 13px; }
       #cc-commands b { color: var(--tb-teal); }
-      details.rehearsal { border: 1px dashed var(--tb-line); border-radius: 8px; padding: 8px; }
-      details.rehearsal summary { cursor: pointer; font-weight: 700; color: var(--tb-dim); min-height: 44px; }
       footer { padding: 10px 20px 30px; color: #6c757d; font-size: 12px; }
       code { color: var(--tb-gold); }
-      @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+      @media (max-width: 1100px) {
+        .cc-layout { grid-template-columns: 1fr; }
+        .cc-logs { grid-template-columns: 1fr; }
+        #game { position: relative; top: auto; }
+        /* UX-002: compact shell, bottom tabs replace the rail. */
+        .tb-rail { display: none; }
+        .cc-top { padding: 6px 12px; gap: 6px 10px; }
+        .cc-brand p { display: none; }
+        .cc-brand h1 { font-size: 15px; }
+        body { padding-bottom: calc(var(--tb-tabs-h) + env(safe-area-inset-bottom, 0px)); }
+        .tb-tabs {
+          display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+          min-height: calc(var(--tb-tabs-h) + env(safe-area-inset-bottom, 0px));
+          padding-bottom: env(safe-area-inset-bottom, 0px);
+          background: rgba(26, 16, 51, 0.98); border-top: 1px solid var(--tb-line);
+        }
+        .tb-tabs a {
+          flex: 1 1 0; display: flex; align-items: center; justify-content: center;
+          min-height: var(--tb-tabs-h); padding: 6px 4px; text-align: center;
+          color: var(--tb-dim); font-size: 13px; font-weight: 700; text-decoration: none;
+          border-top: 3px solid transparent;
+        }
+        .tb-tabs a[aria-current="page"] { color: var(--tb-gold); border-top-color: var(--tb-gold); }
+      }
+      @media (min-width: 1100px) {
+        /* UX-002: desktop shell grid — 220px rail, fluid content. */
+        .tb-shell { display: grid; grid-template-columns: var(--tb-rail-w) minmax(0, 1fr); align-items: start; }
+        .tb-rail {
+          display: flex; flex-direction: column; gap: 4px;
+          position: sticky; top: 0; height: 100vh; overflow-y: auto;
+          padding: 16px 12px; background: #1a1033; border-right: 1px solid var(--tb-line);
+        }
+        .tb-body { min-width: 0; }
+        .tb-tabs { display: none; }
+      }
+      /* UX-002 — shell, nav links, alert banner. Restrained operational
+         chrome: flat navy surfaces, one gold accent, no gradients. */
+      .skip { position: absolute; left: -9999px; top: 0; z-index: 100; background: var(--tb-gold); color: #231a06; font-weight: 700; padding: 10px 16px; border-radius: 0 0 8px 0; text-decoration: none; }
+      .skip:focus { left: 0; }
+      .tb-rail__brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 12px; margin-bottom: 8px; border-bottom: 1px solid var(--tb-hairline); }
+      .tb-rail__brand strong { display: block; font-size: 16px; color: var(--tb-gold); }
+      .tb-rail__brand span { display: block; font-size: 11px; color: var(--tb-dim); }
+      .tb-rail a.tb-link { display: block; padding: 10px 12px; border-radius: 8px; border-left: 3px solid transparent; color: var(--tb-dim); font-weight: 700; font-size: 14px; text-decoration: none; min-height: 44px; }
+      .tb-rail a.tb-link span { display: block; font-weight: 400; font-size: 11.5px; color: var(--tb-faint); }
+      .tb-rail a.tb-link:hover { background: #2b2542; }
+      .tb-rail a.tb-link[aria-current="page"] { background: #2b2542; border-left-color: var(--tb-gold); color: var(--tb-gold); }
+      .tb-rail a.tb-link[aria-current="page"] span { color: var(--tb-dim); }
+      .tb-rail__note { margin: auto 8px 0; padding-top: 12px; border-top: 1px solid var(--tb-hairline); font-size: 11px; color: var(--tb-faint); }
+      /* Single sticky wrapper: header + alerts stick as one unit so the
+         banner never scrolls away and never competes with #game. */
+      .tb-sticky { position: sticky; top: 0; z-index: 30; background: rgba(26, 16, 51, 0.97); border-bottom: 1px solid var(--tb-line); }
+      .tb-sticky .cc-top { position: static; border-bottom: 0; background: transparent; }
+      #tb-next-action { flex-basis: 100%; font-size: 13px; font-weight: 600; color: var(--tb-gold); }
+      #tb-alerts { padding: 0 20px; }
+      #tb-alerts[hidden] { display: none; }
+      .tb-alert { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: baseline; margin: 8px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid; font-size: 13.5px; }
+      .tb-alert strong { white-space: nowrap; }
+      .tb-alert span { color: inherit; }
+      .tb-alert[data-sev="error"] { background: #6b1d1d; border-color: var(--tb-red); color: #ffd9de; }
+      .tb-alert[data-sev="warning"] { background: var(--tb-amber); border-color: var(--tb-gold-deep); color: var(--tb-gold); }
+      .tb-alert[data-sev="info"] { background: #2b2542; border-color: var(--tb-line); color: var(--tb-ink); }
+      .tb-alert a { color: inherit; font-weight: 700; }
+      .tb-alert button { width: auto; margin: 0 0 0 auto; padding: 4px 10px; min-height: 32px; font-size: 13px; background: transparent; border: 1px solid currentColor; border-radius: 6px; color: inherit; }
+      [hidden] { display: none !important; }
+      .tb-main { max-width: 1600px; margin: 0 auto; width: 100%; }
+      .tb-view-title { margin: 0; padding: 14px 12px 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tb-teal); }
+      /* UX-003 — Overview summary layer. Same tokens, same card surface;
+         hierarchy comes from type scale and one accent per state. */
+      .ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      .ov-primary, .ov-secondary { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .ov-primary .card, .ov-secondary .card { margin-bottom: 0; }
+      .ov-hero { border-left: 3px solid var(--tb-gold); }
+      .ov-hero .big { font-size: 24px; }
+      .ov-card h3.ov-sub { margin: 10px 0 2px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tb-faint); }
+      .ov-card h3.ov-sub:first-of-type { margin-top: 8px; }
+      #ov-deeds-preview div, #ov-feed-preview div { padding: 3px 0; border-bottom: 1px solid #2b2542; font-size: 13px; }
+      .ov-ids { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; }
+      .ov-ids .big { font-size: 16px; font-weight: 700; color: var(--tb-gold); }
+      .ov-ids #cc-chapter { font-size: 13px; color: var(--tb-dim); }
+      .ov-yt-state { font-size: 16px; font-weight: 700; }
+      .ov-next-title { font-size: 17px; font-weight: 700; }
+      .ov-next[data-sev="urgent"] { border-color: var(--tb-red); }
+      .ov-next[data-sev="urgent"] .ov-next-title { color: var(--tb-rose); }
+      .ov-next[data-sev="attention"] { border-color: var(--tb-gold-deep); }
+      .ov-next[data-sev="attention"] .ov-next-title { color: var(--tb-gold); }
+      .ov-next[data-sev="info"] .ov-next-title { color: var(--tb-ink); }
+      a.ov-more { display: inline-block; margin-top: 8px; min-height: 44px; line-height: 44px; color: var(--tb-gold); font-weight: 700; font-size: 14px; }
+      #view-overview a:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      #ov-vote-line, #ov-queue-line, #ov-paid-line { font-size: 14px; }
+      /* UX-004 — Control Room operator workspace. Same tokens and card
+         surface; groups separated by purpose, danger set apart. */
+      .cr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      .cr-grid .card { margin-bottom: 0; }
+      .cr-grid .card h3 { margin: 12px 0 4px; font-size: 12px; letter-spacing: 0.08em; color: var(--tb-teal); }
+      .cr-override { margin-top: 12px; padding: 10px 12px; border: 1px dashed var(--tb-gold-deep); border-radius: 8px; }
+      .cr-override h3 { margin-top: 0; color: var(--tb-gold); }
+      .cr-danger { border-color: var(--tb-red); grid-column: 1 / -1; }
+      .cr-danger h2 { color: var(--tb-rose); }
+      .cr-action { padding: 8px 0; }
+      .cr-action + .cr-action { border-top: 1px solid var(--tb-hairline); margin-top: 8px; padding-top: 12px; }
+      .cr-why { margin-top: 4px; min-height: 0; }
+      .cr-why:empty { display: none; }
+      #cr-vote-why, #cr-override-why, #cr-rehearsal-why { margin-top: 6px; }
+      #cr-vote-why:empty, #cr-override-why:empty, #cr-rehearsal-why:empty { display: none; }
+      #cr-session-state { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+      #view-control button:disabled, #view-control input:disabled, #view-control select:disabled { opacity: 0.45; cursor: not-allowed; }
+      #view-control button:disabled:hover { filter: none; }
+      #view-control a:focus-visible, #view-control summary:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      #cr-confirm { background: #171228; color: var(--tb-ink); border: 1px solid var(--tb-line); border-radius: 12px; padding: 20px 22px; width: min(480px, calc(100vw - 32px)); }
+      #cr-confirm::backdrop { background: rgba(0, 0, 0, 0.6); }
+      #cr-confirm h2 { margin: 0 0 8px; font-size: 18px; color: var(--tb-gold); }
+      #cr-confirm p { margin: 0 0 4px; font-size: 14px; color: var(--tb-dim); }
+      #cr-confirm .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+      #cr-confirm .btn-row button { flex: 1 1 0; margin-top: 0; }
+      .ov-detail { grid-template-columns: minmax(0, 1fr); }
+      /* UX-005 — Activity audit workspace. Same tokens; calm list surfaces. */
+      .ac-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      .ac-main, .ac-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .ac-grid .card { margin-bottom: 0; }
+      .ac-filters { display: flex; flex-wrap: wrap; gap: 8px; }
+      .ac-filters .ac-filter { width: auto; flex: 1 1 120px; margin-top: 0; padding: 9px 10px; min-height: 44px; font-size: 13.5px; }
+      .ac-filters .ac-filter[aria-pressed="true"] { background: var(--tb-gold); color: #231a06; }
+      #ac-timeline { list-style: none; margin: 8px 0 0; padding: 0; }
+      .ac-item { padding: 7px 0; border-top: 1px solid var(--tb-hairline); font-size: 13.5px; overflow-wrap: anywhere; }
+      .ac-item:first-child { border-top: 0; }
+      .ac-cat { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--tb-teal); border: 1px solid var(--tb-line); border-radius: 6px; padding: 1px 7px; margin-right: 8px; white-space: nowrap; }
+      .ac-item[data-warn="1"] { border-left: 3px solid var(--tb-rose); padding-left: 8px; }
+      .ac-item[data-cat="ledger-applied"] .ac-cat, .ac-item[data-cat="paid"] .ac-cat { color: var(--tb-gold); border-color: var(--tb-gold-deep); }
+      .ac-item[data-cat="vote-live"] .ac-cat, .ac-item[data-cat="vote-mention"] .ac-cat { color: var(--tb-gold); }
+      .ac-text { color: var(--tb-ink); }
+      .ac-meta { display: block; font-size: 12px; color: var(--tb-faint); margin-top: 2px; font-variant-numeric: tabular-nums; }
+      #ac-queue-list div, #ac-queue-summary { font-size: 13px; }
+      #ac-queue-list div { padding: 3px 0; border-bottom: 1px solid #2b2542; overflow-wrap: anywhere; }
+      #ac-more-row { margin-top: 8px; }
+      #view-activity a:focus-visible, #view-activity button:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      /* UX-006 — Settings configuration workspace. Same tokens; calm setup flow. */
+      .st-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      .st-main, .st-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .st-grid .card { margin-bottom: 0; }
+      .st-steps { list-style: none; margin: 8px 0; padding: 0; }
+      .st-steps li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--tb-hairline); font-size: 14px; }
+      .st-steps li:first-child { border-top: 0; }
+      .st-state { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--tb-faint); border: 1px solid var(--tb-line); border-radius: 6px; padding: 1px 8px; white-space: nowrap; }
+      .st-steps li[data-state="done"] .st-state { color: var(--tb-green); border-color: var(--tb-green); }
+      .st-steps li[data-state="current"] .st-state { color: var(--tb-gold); border-color: var(--tb-gold-deep); }
+      .st-card h3.st-sub { margin: 12px 0 4px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tb-faint); }
+      #st-recovery div { padding: 3px 0; font-size: 13.5px; }
+      #st-obs-url { font-variant-numeric: tabular-nums; }
+      #view-settings a:focus-visible, #view-settings button:focus-visible, #view-settings input:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      @media (max-width: 1100px) {
+        .st-grid { display: flex; flex-direction: column; }
+        .st-main, .st-side { display: contents; }
+      }
+      @media (max-width: 1100px) {
+        .ac-grid { display: flex; flex-direction: column; }
+        .ac-main, .ac-side { display: contents; }
+        .ac-filters .ac-filter { flex: 1 1 44%; }
+      }
+      @media (max-width: 1100px) {
+        .ov-grid { display: flex; flex-direction: column; }
+        .ov-primary, .ov-secondary { display: contents; }
+        .ov-next { order: -3; }
+        #game { order: -2; }
+      }
       @media (prefers-reduced-motion: reduce) { #outcome.flash { animation: none; } button { transition: none; } }
     </style>
   </head>
   <body>
-    <header>
-      <div>
-        <h1>Tidebound — keeper console</h1>
-        <p>Runtime controls for the live show. The OBS overlay (<code>/overlay.html</code>) shows the game to viewers.</p>
+    <a class="skip" href="#tb-main">Skip to dashboard content</a>
+    <div class="tb-shell">
+      <nav class="tb-rail" aria-label="Dashboard sections">
+        <div class="tb-rail__brand">
+          <span class="cc-lantern" aria-hidden="true"></span>
+          <div><strong>Tidebound</strong><span>keeper console</span></div>
+        </div>
+        <a class="tb-link" data-section="overview" href="#overview">Overview<span>Session, connection, world</span></a>
+        <a class="tb-link" data-section="control" href="#control">Control Room<span>Session, votes, rites</span></a>
+        <a class="tb-link" data-section="activity" href="#activity">Activity<span>Commands, events, diagnostics</span></a>
+        <a class="tb-link" data-section="settings" href="#settings">Settings<span>Connection, rehearsal, saves</span></a>
+        <p class="tb-rail__note">Tidebound keeper console — Overview · Control Room · Activity · Settings.</p>
+      </nav>
+      <div class="tb-body">
+        <div class="tb-sticky">
+          <header class="cc-top">
+      <div class="cc-brand">
+        <span class="cc-lantern" aria-hidden="true"></span>
+        <div>
+          <h1>Tidebound — keeper console</h1>
+          <p>Live show runtime · viewers watch at <code>/overlay.html</code></p>
+        </div>
       </div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+      <div class="cc-live">
         <span id="cc-status" role="status" aria-label="Tidebound runtime status">Runtime · Running</span>
-        <button class="ghost" id="btn-pause" style="width:auto">Pause runtime</button>
-        <button class="primary" id="btn-resume" style="width:auto">Resume runtime</button>
+      </div>
+      <div class="cc-live">
+        <span id="yt-status" data-s="off" role="status">Not connected</span>
+      </div>
+      <div class="cc-where">
+        <span id="tb-next-action" role="status">Next: watching the world.</span>
       </div>
     </header>
-    <main>
-      <section>
-        <div id="game"></div>
-        <div class="card">
-          <h2>Story log</h2>
-          <pre class="log" id="story-log"></pre>
+    <div id="tb-alerts" hidden></div>
+  </div>
+  <main class="tb-main" id="tb-main">
+    <section id="view-overview" aria-labelledby="tb-h-overview" tabindex="-1">
+      <h2 class="tb-view-title" id="tb-h-overview">Overview</h2>
+      <div class="ov-grid">
+        <div class="ov-primary">
+          <div id="game" role="img" aria-label="Tidebound living game world preview"></div>
+          <div class="card ov-hero" aria-live="polite" aria-label="Current story moment">
+            <h2>Story moment</h2>
+            <div class="big" id="cc-moment">—</div>
+            <div id="cc-objective">—</div>
+            <div id="cc-vex">—</div>
+          </div>
+          <div class="card ov-card" aria-labelledby="ov-act-h">
+            <h2 id="ov-act-h">Audience activity</h2>
+            <div class="dim" id="ov-queue-line">—</div>
+            <div class="dim" id="ov-paid-line">—</div>
+            <h3 class="ov-sub">Latest deeds</h3>
+            <div id="ov-deeds-preview">—</div>
+            <h3 class="ov-sub">Latest events</h3>
+            <div id="ov-feed-preview">—</div>
+            <a class="ov-more" href="#activity">Full activity →</a>
+          </div>
         </div>
-        <div class="card">
-          <h2>Event feed (batched)</h2>
-          <pre class="log" id="feed-list"></pre>
+        <div class="ov-secondary">
+          <div class="card ov-card ov-next" id="ov-next-card" data-sev="info" aria-labelledby="ov-next-h">
+            <h2 id="ov-next-h">Next action</h2>
+            <div class="ov-next-title" id="ov-next-title">—</div>
+            <div class="dim" id="ov-next-detail">—</div>
+            <a class="ov-more" id="ov-next-link" href="#overview">Details below</a>
+          </div>
+          <div class="card ov-card" aria-labelledby="ov-session-h">
+            <h2 id="ov-session-h">Session</h2>
+            <div class="ov-ids"><span class="big" id="cc-arc">—</span> <span id="cc-chapter">—</span></div>
+            <div class="dim" id="ov-persist">—</div>
+          </div>
+          <div class="card ov-card" aria-labelledby="ov-yt-h">
+            <h2 id="ov-yt-h">Connection</h2>
+            <div class="ov-yt-state" id="ov-yt-state">—</div>
+            <div class="dim" id="ov-yt-note">—</div>
+            <a class="ov-more" href="#settings">Connection settings →</a>
+          </div>
+          <div class="card ov-card" aria-live="polite" aria-labelledby="ov-world-h">
+            <h2 id="ov-world-h">World condition</h2>
+            <div class="stat-row"><span id="cc-threat">—</span><span id="cc-resolve">—</span><span id="cc-supplies">—</span></div>
+            <div class="dim" id="cc-location">—</div>
+            <div class="dim" id="cc-standing">—</div>
+            <div id="cc-m1">—</div>
+            <div class="meterbar" id="cc-m1-bar" role="progressbar" aria-label="Charting the Pale" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><i id="cc-m1-fill"></i></div>
+            <div id="cc-m2">—</div>
+            <div class="meterbar" id="cc-m2-bar" role="progressbar" aria-label="Beacon Oil" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0"><i id="cc-m2-fill"></i></div>
+          </div>
+          <div class="card ov-card" aria-labelledby="ov-vote-h">
+            <h2 id="ov-vote-h">Assembly vote</h2>
+            <div id="ov-vote-line">—</div>
+            <a class="ov-more" href="#control">Open Control Room →</a>
+          </div>
+        </div>
+      </div>
+      <h2 class="tb-view-title">Full console — detail and history</h2>
+      <div class="cc-layout ov-detail">
+      <section class="cc-stage" aria-label="Full story logs">
+        <div class="cc-logs">
+          <div class="card">
+            <h2>Story log</h2>
+            <pre class="log" id="story-log"></pre>
+          </div>
+          <div class="card">
+            <h2>Event feed (batched)</h2>
+            <pre class="log" id="feed-list"></pre>
+          </div>
         </div>
       </section>
-      <aside>
-        <div class="cc-group" role="presentation">Now — world and story moment <span class="cc-why">· what is happening</span></div>
-        <div class="card" aria-live="polite">
-          <h2>World state</h2>
-          <div class="big" id="cc-arc">—</div>
-          <div class="dim" id="cc-chapter">—</div>
-          <div class="stat-row"><span id="cc-threat">—</span><span id="cc-resolve">—</span><span id="cc-supplies">—</span></div>
-          <div id="cc-location">—</div>
-          <div class="dim" id="cc-standing">—</div>
-        </div>
-        <div class="card" aria-live="polite">
-          <h2>Story moment · objective</h2>
-          <div class="big" id="cc-moment">—</div>
-          <div id="cc-objective">—</div>
-          <div id="cc-vex">—</div>
-        </div>
-        <div class="cc-group" role="presentation">Keeper actions — assembly and rites <span class="cc-why">· what you can safely do</span></div>
-        <div class="card" aria-live="polite">
-          <h2>Assembly vote</h2>
+      <section class="cc-second" aria-label="Reference and diagnostics">
+        <details class="cc-drawer">
+          <summary>Audience commands <span class="cc-why">· what viewers can type</span></summary>
+          <div id="cc-commands">—</div>
+        </details>
+        <details class="cc-drawer">
+          <summary>World memory <span class="cc-why">· deeds and recap</span></summary>
+          <div class="card">
+            <h2>The world remembers</h2>
+            <div id="cc-deeds">—</div>
+          </div>
+          <div class="card">
+            <h2>Previously, in Tidebound…</h2>
+            <div id="cc-recap">—</div>
+          </div>
+        </details>
+        <details class="cc-drawer">
+          <summary>System diagnostics <span class="cc-why">· queue, ledger, persistence</span></summary>
+          <div class="card">
+            <h2>Event queue</h2>
+            <pre class="log" id="queue-list"></pre>
+          </div>
+          <div class="card">
+            <h2>Paid history</h2>
+            <div class="dim" id="cc-ledger">—</div>
+          </div>
+        </details>
+      </section>
+      </div>
+    </section>
+    <section id="view-control" aria-labelledby="tb-h-control" tabindex="-1" hidden>
+      <h2 class="tb-view-title" id="tb-h-control">Control Room</h2>
+      <div class="cr-grid">
+        <section class="card cr-card" aria-labelledby="cr-session-h">
+          <h2 id="cr-session-h">Session</h2>
+          <div class="dim" id="cr-session-state">—</div>
+          <div class="btn-row">
+            <button class="ghost" id="btn-pause">Pause runtime</button>
+            <button class="primary" id="btn-resume">Resume runtime</button>
+          </div>
+          <div class="dim">Pausing holds incoming events; the world and YouTube connection are untouched. Resume lets held events flow.</div>
+        </section>
+        <section class="card" id="cc-vote-card" aria-live="polite" aria-labelledby="cr-vote-h">
+          <h2 id="cr-vote-h">Assembly vote</h2>
           <div id="cc-vote">—</div>
           <div class="btn-row">
-            <button class="primary" id="btn-open-v1">Open route vote</button>
-            <button class="primary" id="btn-open-v2">Open Kindling vote</button>
+            <button class="primary" id="btn-open-v1" aria-describedby="cr-vote-why">Open route vote</button>
+            <button class="primary" id="btn-open-v2" aria-describedby="cr-vote-why">Open Kindling vote</button>
           </div>
+          <div class="dim" id="cr-vote-why" role="status"></div>
           <div class="btn-row">
-            <button class="ghost" id="btn-close-vote">Close vote</button>
+            <button class="ghost" id="btn-close-vote" aria-describedby="cr-vote-why">Close vote</button>
           </div>
-          <label>Keeper override (records an auditable deed; winner still needs the rite)</label>
-          <div class="btn-row">
-            <button class="ghost" id="btn-override-0">Lean 1st</button>
-            <button class="ghost" id="btn-override-1">Lean 2nd</button>
-            <button class="ghost" id="btn-override-2">Lean 3rd</button>
+          <div class="cr-override">
+            <h3>Keeper override <span class="cc-why">· bypasses the audience vote</span></h3>
+            <div class="dim">Records an auditable keeper deed and fires the chosen path immediately; ballots are left untouched and the vote closes. Use only when the story demands a keeper's call.</div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-override-0" aria-describedby="cr-override-why">Lean 1st</button>
+              <button class="ghost" id="btn-override-1" aria-describedby="cr-override-why">Lean 2nd</button>
+              <button class="ghost" id="btn-override-2" aria-describedby="cr-override-why">Lean 3rd</button>
+            </div>
+            <div class="dim" id="cr-override-why" role="status"></div>
           </div>
-        </div>
-        <div class="card" aria-live="polite">
-          <h2>Keeper rites — named story actions</h2>
+        </section>
+        <section class="card cr-card" aria-live="polite" aria-labelledby="cr-rites-h">
+          <h2 id="cr-rites-h">Keeper rites — named story actions</h2>
           <div id="cc-rites-hint" class="dim">Named rites only — the assembly decides routes and burnings. Each rite tells one story; costs are paid in supplies or resolve.</div>
           <div class="rite">
-            <button class="ghost" id="btn-rite-sable" aria-describedby="desc-rite-sable">Sable's mending rite</button>
+            <button class="ghost" id="btn-rite-sable" aria-describedby="desc-rite-sable cr-rite-sable-why">Sable's mending rite</button>
             <p class="rite-desc" id="desc-rite-sable">Tend the lantern's iron; Rho hears every hammer-fall. <span class="needs">Needs 5 supplies · ready from the first bell.</span></p>
+            <div class="dim cr-why" id="cr-rite-sable-why" role="status"></div>
           </div>
           <div class="rite">
-            <button class="ghost" id="btn-rite-tide" aria-describedby="desc-rite-tide">Tide prayer</button>
+            <button class="ghost" id="btn-rite-tide" aria-describedby="desc-rite-tide cr-rite-tide-why">Tide prayer</button>
             <p class="rite-desc" id="desc-rite-tide">Pray the keepers through the rising Gloam. <span class="needs">Needs threat 50+ and 10 supplies.</span></p>
+            <div class="dim cr-why" id="cr-rite-tide-why" role="status"></div>
           </div>
           <div class="rite">
-            <button class="ghost" id="btn-rite-ilya" aria-describedby="desc-rite-ilya">Ilya's duel</button>
+            <button class="ghost" id="btn-rite-ilya" aria-describedby="desc-rite-ilya cr-rite-ilya-why">Ilya's duel</button>
             <p class="rite-desc" id="desc-rite-ilya">Answer steel with steel on the Highspire road; Ilya may lower her blade. <span class="needs">Needs parley, 3 kills and 10 resolve.</span></p>
+            <div class="dim cr-why" id="cr-rite-ilya-why" role="status"></div>
           </div>
           <div class="rite">
-            <button class="ghost" id="btn-rite-rekindle" aria-describedby="desc-rite-rekindle">Cinderholm rekindle</button>
+            <button class="ghost" id="btn-rite-rekindle" aria-describedby="desc-rite-rekindle cr-rite-rekindle-why">Cinderholm rekindle</button>
             <p class="rite-desc" id="desc-rite-rekindle">Rekindle the fallen beacon with oil and oath. <span class="needs">Needs Cinderholm lost, 5 beacon oil and 25 supplies.</span></p>
+            <div class="dim cr-why" id="cr-rite-rekindle-why" role="status"></div>
           </div>
           <div class="rite">
-            <button class="ghost" id="btn-rite-rho" aria-describedby="desc-rite-rho">Rho's plain speech</button>
+            <button class="ghost" id="btn-rite-rho" aria-describedby="desc-rite-rho cr-rite-rho-why">Rho's plain speech</button>
             <p class="rite-desc" id="desc-rite-rho">Draw Rho into plain speech; her first peal wakes the chapel-steps. <span class="needs">Needs Rho's trust (friendly) · once.</span></p>
+            <div class="dim cr-why" id="cr-rite-rho-why" role="status"></div>
           </div>
-        </div>
-        <div class="cc-group" role="presentation">World memory — works, deeds, recap <span class="cc-why">· what changed</span></div>
-        <div class="card">
-          <h2>Community works</h2>
-          <div id="cc-m1">—</div>
-          <div class="meterbar" role="progressbar" aria-label="Charting the Pale"><i id="cc-m1-fill"></i></div>
-          <div id="cc-m2">—</div>
-          <div class="meterbar" role="progressbar" aria-label="Beacon Oil"><i id="cc-m2-fill"></i></div>
-        </div>
-        <div class="card">
-          <h2>The world remembers</h2>
-          <div id="cc-deeds">—</div>
-        </div>
-        <div class="card">
-          <h2>Previously, in Tidebound…</h2>
-          <div id="cc-recap">—</div>
-          <div class="btn-row">
-            <button class="ghost" id="btn-end-stream">Close stream &amp; open next</button>
-          </div>
-        </div>
-        <div class="cc-group" role="presentation">Audience — what viewers can do <span class="cc-why">· commands, grouped by meaning</span></div>
-        <div class="card">
-          <h2>What viewers can type</h2>
-          <div id="cc-commands">—</div>
-        </div>
-        <div class="cc-group" role="presentation">System — rehearsal, connection, queue, persistence <span class="cc-why">· safe to continue</span></div>
-        <div class="card">
-          <details class="rehearsal">
-            <summary>Rehearsal (test-only simulation)</summary>
-            <div class="row">
-              <div><label>Viewer name</label><input id="viewer-name" value="Kaushal" /></div>
-              <div><label>Viewer id</label><input id="viewer-id" value="kaushal" /></div>
+        </section>
+        <section class="card cr-card cr-danger" aria-labelledby="cr-danger-h">
+          <h2 id="cr-danger-h">Danger zone</h2>
+          <div class="cr-action">
+            <div class="dim">Close this stream when the show ends. The world persists; a fresh stream opens.</div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-end-stream">Close stream &amp; open next</button>
             </div>
-            <label>Command (whitelisted)</label>
-            <select id="command">
-              <option>!strike</option>
-              <option>!mend</option>
-              <option>!scout</option>
-              <option>!shield</option>
-              <option>!ring</option>
-              <option>!hide</option>
-              <option>!tribute</option>
-              <option>!defy</option>
-              <option>!voteA</option>
-              <option>!voteB</option>
-              <option>!help</option>
-            </select>
-            <button class="primary" id="btn-command">Send Command</button>
-            <div class="row">
-              <div>
-                <label>Paid event</label>
-                <select id="paid-preset">
-                  <option value="50">₹50 — Gale Call</option>
-                  <option value="100">₹100 — Supply Convoy</option>
-                  <option value="500">₹500 — Herald's Attention</option>
-                  <option value="1000">₹1000 — The Bell Tolls</option>
-                  <option value="custom">custom…</option>
-                </select>
+          </div>
+          <div class="cr-action">
+            <div class="dim">Reset returns Tidebound to genesis and overwrites the save. Deeds and progress are lost.</div>
+            <div class="btn-row">
+              <button class="danger" id="btn-reset">Reset World</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+    <section id="view-activity" aria-labelledby="tb-h-activity" tabindex="-1" hidden>
+      <h2 class="tb-view-title" id="tb-h-activity">Activity</h2>
+      <div class="ac-grid">
+        <div class="ac-main">
+          <div class="card ac-card" aria-labelledby="ac-sum-h">
+            <h2 id="ac-sum-h">Session activity</h2>
+            <div class="stat-row">
+              <span id="ac-sum-processed">—</span><span id="ac-sum-lifetime">—</span><span id="ac-sum-queue">—</span><span id="ac-sum-ledger">—</span><span id="ac-sum-warnings">—</span>
+            </div>
+            <div class="dim">Processed = engine results retained this page-load (last 30). Lifetime totals persist across reloads. Queue and diagnostics are live state.</div>
+          </div>
+          <div class="card ac-card" aria-labelledby="ac-filter-h">
+            <h2 id="ac-filter-h">Filter timeline</h2>
+            <div class="ac-filters" role="group" aria-label="Activity timeline filters">
+              <button class="ghost ac-filter" id="ac-filter-all" aria-pressed="true">All</button>
+              <button class="ghost ac-filter" id="ac-filter-commands" aria-pressed="false">Commands</button>
+              <button class="ghost ac-filter" id="ac-filter-paid" aria-pressed="false">Paid &amp; compensation</button>
+              <button class="ghost ac-filter" id="ac-filter-votes" aria-pressed="false">Votes</button>
+              <button class="ghost ac-filter" id="ac-filter-warnings" aria-pressed="false">Warnings &amp; errors</button>
+            </div>
+          </div>
+          <div class="card ac-card" aria-labelledby="ac-timeline-h">
+            <h2 id="ac-timeline-h">Timeline</h2>
+            <div class="dim">Newest first within each stream: live vote · processed · story · deeds · ledger. Streams share no common clock, so no global order is claimed. Times appear only where the source records them.</div>
+            <ul id="ac-timeline" aria-label="Activity timeline"></ul>
+            <div class="dim" id="ac-timeline-empty" hidden></div>
+            <div class="btn-row" id="ac-more-row" hidden>
+              <button class="ghost" id="ac-more-deeds">Show all deeds</button>
+              <button class="ghost" id="ac-more-ledger">Show all ledger entries</button>
+            </div>
+          </div>
+        </div>
+        <div class="ac-side">
+          <section class="card ac-card" aria-labelledby="ac-queue-h">
+            <h2 id="ac-queue-h">Command queue · live state</h2>
+            <div id="ac-queue-summary">—</div>
+            <div id="ac-queue-list">—</div>
+          </section>
+          <section class="card ac-card" aria-labelledby="ac-ledger-h">
+            <h2 id="ac-ledger-h">Paid ledger · recorded history</h2>
+            <div class="dim" id="ac-ledger-summary">—</div>
+            <div class="dim">Applied entries shaped the world; noted entries are recorded only. Ledger entries appear in the timeline with tier, stream, and time — never amounts or payers.</div>
+          </section>
+          <section class="card ac-card" aria-labelledby="ac-diag-h">
+            <h2 id="ac-diag-h">Diagnostics · current state</h2>
+            <pre class="log" id="ac-diag">—</pre>
+            <div class="dim">Live counters and capacity flags — current state, not event history.</div>
+          </section>
+        </div>
+      </div>
+    </section>
+    <section id="view-settings" aria-labelledby="tb-h-settings" tabindex="-1" hidden>
+      <h2 class="tb-view-title" id="tb-h-settings">Settings</h2>
+      <div class="st-grid">
+        <div class="st-main">
+          <section class="card st-card" aria-labelledby="st-source-h">
+            <h2 id="st-source-h">Input source</h2>
+            <div class="src-toggle" role="radiogroup" aria-label="Input source">
+              <label><input type="radio" name="src" id="src-sim" checked /> Simulation</label>
+              <label><input type="radio" name="src" id="src-yt" /> YouTube Live</label>
+            </div>
+            <div class="dim"><strong>Simulation</strong> rehearses offline — nothing leaves this browser. <strong>YouTube Live</strong> lets chat commands from your broadcast drive the world, via the local sidecar.</div>
+            <div class="dim" id="st-source-line">—</div>
+          </section>
+          <section class="card st-card" aria-labelledby="st-connect-h">
+            <h2 id="st-connect-h">YouTube connection</h2>
+            <ol class="st-steps" id="st-steps">
+              <li data-step="authorize"><strong>1 · Authorize</strong> <span class="st-state" id="st-step-authorize">—</span></li>
+              <li data-step="connect"><strong>2 · Connect</strong> <span class="st-state" id="st-step-connect">—</span></li>
+              <li data-step="verify"><strong>3 · Verify</strong> <span class="st-state" id="st-step-verify">—</span></li>
+            </ol>
+            <div class="dim">Steps light up from actual connection state — pressing a button alone never marks a step done. “Verified” appears only while chat is arriving.</div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-yt-auth">1 · Authorize with Google</button>
+              <button class="primary" id="btn-yt-connect">2 · Connect to live chat</button>
+              <button class="ghost" id="btn-yt-disconnect">Disconnect</button>
+            </div>
+            <h3 class="st-sub">If something goes wrong</h3>
+            <div class="dim" id="st-recovery">—</div>
+          </section>
+          <section class="card st-card" aria-labelledby="cr-rehearsal-h">
+            <h2 id="cr-rehearsal-h">Rehearsal — simulation only</h2>
+            <div class="dim" id="cr-source-line">—</div>
+            <div class="dim cr-why" id="cr-rehearsal-why" role="status"></div>
+            <details class="rehearsal" open>
+              <summary>Rehearsal inputs (test-only simulation)</summary>
+              <div class="row">
+                <div><label>Viewer name</label><input id="viewer-name" value="Kaushal" /></div>
+                <div><label>Viewer id</label><input id="viewer-id" value="kaushal" /></div>
               </div>
-              <div><label>Custom ₹</label><input id="paid-custom" type="number" min="1" placeholder="25" /></div>
+              <label>Command (whitelisted)</label>
+              <select id="command">
+                <option>!strike</option>
+                <option>!mend</option>
+                <option>!scout</option>
+                <option>!shield</option>
+                <option>!ring</option>
+                <option>!hide</option>
+                <option>!tribute</option>
+                <option>!defy</option>
+                <option>!voteA</option>
+                <option>!voteB</option>
+                <option>!help</option>
+              </select>
+              <button class="primary" id="btn-command">Send Command</button>
+              <div class="row">
+                <div>
+                  <label>Paid event</label>
+                  <select id="paid-preset">
+                    <option value="50">₹50 — Gale Call</option>
+                    <option value="100">₹100 — Supply Convoy</option>
+                    <option value="500">₹500 — Herald's Attention</option>
+                    <option value="1000">₹1000 — The Bell Tolls</option>
+                    <option value="custom">custom…</option>
+                  </select>
+                </div>
+                <div><label>Custom ₹</label><input id="paid-custom" type="number" min="1" placeholder="25" /></div>
+              </div>
+              <button class="paid" id="btn-paid">Send Paid Event</button>
+              <div id="outcome" role="status"></div>
+            </details>
+            <div class="dim">Rehearsal injects test events through the same engine queue — never through YouTube. Paid presets simulate catalysts; they never touch live payments.</div>
+          </section>
+          <section class="card st-card" aria-labelledby="st-persist-h">
+            <h2 id="st-persist-h">World saves</h2>
+            <div class="dim" id="st-persist">—</div>
+            <div class="dim">Save writes the world now (file when the persist server runs, else this browser). Reload replaces the world with the last save and opens a fresh stream — unsaved changes are lost. Export downloads the world as JSON for inspection; there is no in-app restore.</div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-save">Save World</button>
+              <button class="ghost" id="btn-reload">Reload World</button>
+              <button class="ghost" id="btn-export">Export JSON</button>
             </div>
-            <button class="paid" id="btn-paid">Send Paid Event</button>
-            <div id="outcome" role="status"></div>
-          </details>
+          </section>
         </div>
-        <div class="card">
-          <h2>Input source</h2>
-          <div class="src-toggle">
-            <label><input type="radio" name="src" id="src-sim" checked /> Simulation</label>
-            <label><input type="radio" name="src" id="src-yt" /> YouTube Live</label>
-          </div>
-          <div class="yt-block">
-            <div class="yt-label">YouTube Live</div>
-            <div><span id="yt-status" data-s="off" role="status">Not connected</span></div>
-            <div class="dim" id="yt-note">Simulation is driving the world. Select YouTube Live above to connect chat.</div>
-          </div>
-          <pre class="log" id="yt-detail" style="max-height:110px">(start the youtube sidecar, then switch to YouTube Live)</pre>
-          <button class="ghost" id="btn-yt-auth">1 · Authorize with Google</button>
-          <button class="primary" id="btn-yt-connect">2 · Connect to live chat</button>
-          <button class="ghost" id="btn-yt-disconnect">Disconnect</button>
+        <div class="st-side">
+          <section class="card st-card" aria-labelledby="st-obs-h">
+            <h2 id="st-obs-h">OBS Browser Source</h2>
+            <div class="dim">Point an OBS Browser Source at the overlay URL. Size 1920 × 1080. The overlay is transparent by design — no extra styling needed.</div>
+            <label for="st-obs-url">Overlay URL (this server)</label>
+            <input id="st-obs-url" readonly value="" placeholder="Loading…" />
+            <div class="btn-row">
+              <button class="ghost" id="st-obs-copy">Copy URL</button>
+            </div>
+            <div class="dim" id="st-obs-done" role="status"></div>
+          </section>
+          <section class="card st-card" aria-labelledby="st-diag-h">
+            <h2 id="st-diag-h">Connection diagnostics · advanced</h2>
+            <div class="dim" id="yt-note">—</div>
+            <pre class="log" id="yt-detail" style="max-height:110px">—</pre>
+            <div class="dim">Sidecar counters and wire detail for troubleshooting. The alert banner stays the primary notification surface.</div>
+          </section>
         </div>
-        <div class="card">
-          <h2>Event queue</h2>
-          <pre class="log" id="queue-list"></pre>
-        </div>
-        <div class="card">
-          <h2>Persistence</h2>
-          <button class="ghost" id="btn-save">Save World</button>
-          <button class="ghost" id="btn-reload">Reload World</button>
-          <button class="ghost" id="btn-export">Export JSON</button>
-          <button class="danger" id="btn-reset">Reset World</button>
-          <div class="dim" id="cc-ledger">—</div>
-        </div>
-      </aside>
-    </main>
-    <footer>
-      Engine: <code>src/engine</code> (no DOM/Phaser) · Presentation: <code>src/presentation</code> (read-only projections) · Queue: paid-first, deduped, bounded · Saves to
-      <code>data/world-state.json</code> via <code>npm run persist-server</code>, else localStorage.
-    </footer>
+      </div>
+    </section>
+  </main>
+  <footer>
+    Engine: <code>src/engine</code> (no DOM/Phaser) · Presentation: <code>src/presentation</code> (read-only projections) · Queue: paid-first, deduped, bounded · Saves to
+    <code>data/world-state.json</code> via <code>npm run persist-server</code>, else localStorage.
+  </footer>
+      </div>
+    </div>
+    <dialog id="cr-confirm" aria-labelledby="cr-confirm-title">
+      <h2 id="cr-confirm-title">Confirm</h2>
+      <p id="cr-confirm-body">Are you sure?</p>
+      <div class="btn-row">
+        <button class="ghost" id="cr-confirm-cancel">Cancel</button>
+        <button class="danger" id="cr-confirm-ok">Confirm</button>
+      </div>
+    </dialog>
+    <nav class="tb-tabs" aria-label="Dashboard sections">
+      <a data-section="overview" href="#overview">Overview</a>
+      <a data-section="control" href="#control">Control</a>
+      <a data-section="activity" href="#activity">Activity</a>
+      <a data-section="settings" href="#settings">Settings</a>
+    </nav>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
