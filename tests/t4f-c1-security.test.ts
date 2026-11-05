@@ -159,6 +159,25 @@ describe("T4F-C1 — transport security posture (static audits)", () => {
     const TOKEN_SRC = readFileSync(join(ROOT, "server", "authority-token.mjs"), "utf8");
     expect(TOKEN_SRC).toContain("timingSafeEqual");
   });
+
+  it("D2.6 OAuth start is direct-to-backend with the bearer in the POST body only", () => {
+    const RUNTIME_SRC = readFileSync(join(ROOT, "src", "dashboard", "server-runtime.ts"), "utf8");
+    // Built from the canonical helper — never a hardcoded host, never the
+    // relative Vercel proxy route (which would bind the __Host- cookie to
+    // the wrong hostname).
+    expect(RUNTIME_SRC).toContain("resolveOAuthStartUrl");
+    expect(RUNTIME_SRC).not.toContain("onrender.com");
+    expect(RUNTIME_SRC).not.toMatch(/form\.action\s*=\s*["']\/api\//);
+    // Transport shape preserved: POST, top-level _blank, hidden body field.
+    expect(RUNTIME_SRC).toMatch(/form\.method\s*=\s*["']POST["']/);
+    expect(RUNTIME_SRC).toMatch(/form\.target\s*=\s*["']_blank["']/);
+    expect(RUNTIME_SRC).toMatch(/input\.name\s*=\s*["']token["']/);
+    // The bearer never enters a URL: no query-string token construction.
+    expect(RUNTIME_SRC).not.toMatch(/start[^;]*\?.*token|token.*\+.*action|action.*\+.*token/);
+    expect(RUNTIME_SRC).not.toContain("URLSearchParams");
+    // Missing/invalid origin fails visibly (boolean) instead of submitting.
+    expect(RUNTIME_SRC).toMatch(/if\s*\(!action\)\s*return\s*false/);
+  });
 });
 
 describe("T4F-C1 — token rotation (revocation + loss recovery)", () => {

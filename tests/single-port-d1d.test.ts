@@ -348,6 +348,20 @@ describe("D1-D listener, production, and bundle boundaries (unit)", () => {
     expect(vite).toContain("server/**");
     expect(vite).toContain("data/**");
   });
+
+  it("D2.6 OAuth start resolves from the canonical helper, never env or hardcoded host", async () => {
+    const runtime = await readFile(join(__dirname, "../src/dashboard/server-runtime.ts"), "utf8");
+    // server-runtime.ts must not touch the client env itself and must not
+    // hardcode the backend host; the absolute start URL comes from the one
+    // env-reading module so cookie host and callback host always align.
+    expect(runtime).not.toMatch(/import\.meta\.env/);
+    expect(runtime).not.toContain("VITE_");
+    expect(runtime).not.toContain("onrender.com");
+    expect(runtime).toContain("resolveOAuthStartUrl");
+    const urls = await readFile(join(__dirname, "../src/renderer/state-transport-urls.ts"), "utf8");
+    expect(urls).toContain("VITE_STATE_BASE_URL");
+    expect(urls).not.toContain("onrender.com");
+  });
 });
 
 describe("D1-D local-Postgres limitation (no live verification claimed)", () => {

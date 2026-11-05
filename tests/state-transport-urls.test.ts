@@ -11,7 +11,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  canonicalBackendOrigin,
   normalizeStateBaseUrl,
+  OAUTH_START_PATH,
+  resolveOAuthStartUrl,
   resolveStateTransportUrls,
   STATE_SNAPSHOT_PATH,
   STATE_STREAM_PATH,
@@ -19,6 +22,7 @@ import {
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RENDER = "https://tidebound-api.onrender.com";
+const OAUTH_CALLBACK = "https://tidebound-api.onrender.com/api/youtube/oauth-callback";
 
 describe("D1-F2 state-transport base URL resolution", () => {
   it("configured base yields direct snapshot + SSE URLs", () => {
@@ -91,5 +95,64 @@ describe("D1-F2 both renderer entry paths receive the configuration", () => {
     // Spot-check: control-plane + mutation paths remain relative /api/*.
     expect(runtimeSrc).toContain('"/api/authority/dashboard"');
     expect(runtimeSrc).toContain('"/api/authority/command"');
+  });
+});
+
+describe("D2.6 canonical backend origin for direct-to-Render OAuth start", () => {
+  it("configured Render origin yields the absolute OAuth start URL", () => {
+    expect(OAUTH_START_PATH).toBe("/api/authority/youtube/oauth/start");
+    expect(resolveOAuthStartUrl(RENDER)).toBe(`${RENDER}/api/authority/youtube/oauth/start`);
+  });
+
+  it("start URL hostname matches the callback hostname (cookie-host alignment)", () => {
+    const start = new URL(resolveOAuthStartUrl(RENDER) as string);
+    const callback = new URL(OAUTH_CALLBACK);
+    expect(start.protocol).toBe("https:");
+    expect(start.hostname).toBe(callback.hostname);
+  });
+
+  it("rejects insecure HTTP origins (production __Host- requires Secure)", () => {
+    expect(canonicalBackendOrigin("http://127.0.0.1:3004")).toBeNull();
+    expect(canonicalBackendOrigin("http://tidebound-api.onrender.com")).toBeNull();
+    expect(resolveOAuthStartUrl("http://127.0.0.1:3004")).toBeNull();
+  });
+
+  it("fails visibly (null) when missing or invalid — never a silent relative fallback", () => {
+    for (const bad of [undefined, null, "", "   ", "not-a-url", "/relative/path", "ftp://x.example.com/file", "https://", "tidebound-api.onrender.com"]) {
+      expect(canonicalBackendOrigin(bad)).toBeNull();
+      expect(resolveOAuthStartUrl(bad)).toBeNull();
+    }
+  });
+
+  it("rejects unexpected path, query, fragment, and userinfo components", () => {
+    for (const bad of [
+      `${RENDER}/api`,
+      `${RENDER}/api/`,
+      `${RENDER}?x=1`,
+      `${RENDER}#frag`,
+      "https://user:pass@tidebound-api.onrender.com",
+      "https://user@tidebound-api.onrender.com",
+    ]) {
+      expect(canonicalBackendOrigin(bad)).toBeNull();
+      expect(resolveOAuthStartUrl(bad)).toBeNull();
+    }
+  });
+
+  it("normalizes trailing slashes deterministically and carries no query string", () => {
+    expect(canonicalBackendOrigin(`${RENDER}/`)).toBe(RENDER);
+    const start = resolveOAuthStartUrl(`${RENDER}//`) as string;
+    expect(start).toBe(`${RENDER}/api/authority/youtube/oauth/start`);
+    expect(start).not.toContain("?");
+  });
+
+  it("existing state-transport behavior is unchanged", () => {
+    expect(resolveStateTransportUrls(RENDER)).toEqual({
+      snapshotUrl: `${RENDER}/api/state/snapshot`,
+      streamUrl: `${RENDER}/api/state/stream`,
+    });
+    expect(resolveStateTransportUrls(undefined)).toEqual({
+      snapshotUrl: STATE_SNAPSHOT_PATH,
+      streamUrl: STATE_STREAM_PATH,
+    });
   });
 });

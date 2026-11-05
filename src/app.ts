@@ -121,9 +121,11 @@ export interface YtView {
    * T4F-C2.7-C server-owned Web Server flow: top-level form POST to the
    * Render authority start endpoint (bearer in the POST body, never a URL),
    * which sets a first-party correlation cookie and redirects to Google.
-   * No credentials are constructed, stored, or received here.
+   * No credentials are constructed, stored, or received here. Returns false
+   * (fail visible) when no token is stored or the backend origin is missing
+   * or invalid — never silently falls back to the Vercel proxy route.
    */
-  startWebOAuth(): void;
+  startWebOAuth(): boolean;
   /** Safe OAuth status (connected, channel, pending switch; never secrets). */
   oauthStatus(): Promise<Record<string, unknown> | null>;
   onStatus(fn: (s: YtStatus) => void): () => void;
@@ -338,7 +340,9 @@ export function wirePanel(rt: Runtime, refreshPanel: () => void): void {
     try {
       const st = await rt.yt.oauthStatus();
       if (st && st.configured === true) {
-        rt.yt.startWebOAuth();
+        if (!rt.yt.startWebOAuth()) {
+          flashOutcome("youtube oauth start unavailable — backend origin not configured");
+        }
         return;
       }
     } catch {

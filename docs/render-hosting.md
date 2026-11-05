@@ -99,6 +99,21 @@ Dashboard mutations stay on same-origin relative `/api/*` through the
   `src/renderer/renderer.ts` overlays) via the existing
   `snapshotUrl`/`streamUrl` overrides; reconnect cursors, `since`/`format`
   params, backoff, and snapshot recovery unchanged.
+- OAuth start MUST be direct-to-Render (D2.6, production `correlation-missing`
+  root cause): the dashboard POSTs the start form to the absolute
+  `{VITE_STATE_BASE_URL}/api/authority/youtube/oauth/start` built by
+  `resolveOAuthStartUrl()` — never the relative Vercel route. The authority
+  answers with `Set-Cookie: __Host-yt-oauth-corr`, and a `__Host-` cookie is
+  owned by the request host: a Vercel-proxied start would store it on the
+  Vercel hostname, which the Render callback
+  (`/api/youtube/oauth-callback`) can never receive. The helper requires an
+  HTTPS origin root (no path/query/fragment/userinfo); a missing or invalid
+  origin fails visibly ("oauth start unavailable") instead of silently using
+  the proxy. The bearer travels only in the POST body field, never the URL;
+  POST method, `_blank` target, and all server-side correlation/callback
+  validation are unchanged. In production `VITE_STATE_BASE_URL` is therefore
+  effectively required for YouTube authorization (optional only for state
+  transport).
 - Render `CORS_ORIGINS` MUST contain the exact Vercel production origin
   (and any custom domain) — direct EventSource responses carry no
   credentials but browsers still enforce ACAO; unknown origins get 403 and

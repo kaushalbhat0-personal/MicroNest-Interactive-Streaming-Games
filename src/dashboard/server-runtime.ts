@@ -33,6 +33,7 @@ import type { FeedEntry } from "../engine/feed";
 import type { CanonicalEvent, GameResult, WorldState } from "../engine/types";
 import { WorldStore } from "../persistence/store";
 import { BannerQueue, ViewerFeedStore } from "../presentation/viewer-feed";
+import { resolveOAuthStartUrl } from "../renderer/state-transport-urls";
 import { setPersistFrom } from "../app";
 
 export const AUTHORITY_TOKEN_KEY = "tidebound.authority.token";
@@ -200,16 +201,23 @@ export class ServerRuntime implements Runtime {
           : null;
       },
       startWebOAuth: () => {
-        // Server-owned flow via top-level navigation: the bearer travels in
-        // the POST body (a form cannot set headers and must never use a URL
-        // token). The authority sets a first-party correlation cookie and
-        // redirects this tab to Google; the dashboard tab stays open.
+        // D2.6: direct-to-Render start via top-level navigation. The bearer
+        // travels in the POST body (a form cannot set headers and must never
+        // use a URL token). The action MUST be the absolute backend URL: the
+        // authority sets a host-bound `__Host-` correlation cookie, and a
+        // Vercel-proxied start would store it on the Vercel hostname, which
+        // the Render callback can never receive (correlation-missing). A
+        // missing/invalid backend origin fails visibly — never silently fall
+        // back to the relative proxy route. Top-level form navigation needs
+        // no CORS; the dashboard tab stays open.
         try {
           const token = getStoredToken();
-          if (!token) return;
+          if (!token) return false;
+          const action = resolveOAuthStartUrl();
+          if (!action) return false;
           const form = document.createElement("form");
           form.method = "POST";
-          form.action = "/api/authority/youtube/oauth/start";
+          form.action = action;
           form.target = "_blank";
           const input = document.createElement("input");
           input.type = "hidden";
@@ -219,8 +227,10 @@ export class ServerRuntime implements Runtime {
           document.body.appendChild(form);
           form.submit();
           form.remove();
+          return true;
         } catch {
           /* navigation handoff must never break the panel */
+          return false;
         }
       },
       oauthStatus: async () => {
