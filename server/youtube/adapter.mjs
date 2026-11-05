@@ -42,6 +42,12 @@ export class YouTubeAdapter {
     this.client = opts.client ?? null;
     this.redirectUri = opts.redirectUri;
     this.cursorPath = opts.cursorPath ?? null;
+    /**
+     * Optional encrypted-repository writer (T4F-C2.7-C cloud flow). When set,
+     * token saves go here instead of the loopback plaintext file. The
+     * loopback sidecar path passes nothing and keeps file behavior.
+     */
+    this.persistTokens = typeof opts.persistTokens === "function" ? opts.persistTokens : null;
     this.cursor = null;
     this.ownChannelId = null;
     this.lastApi = null;
@@ -68,6 +74,14 @@ export class YouTubeAdapter {
     this.sendTimes = [];
     /** Serializes inserts so open-before-close ordering holds per chat. */
     this.sendChain = Promise.resolve();
+    /**
+     * Single-flight refresh (T4F-C2.7-D0): concurrent accessToken() callers
+     * share one in-progress refresh. Only the authority process is covered —
+     * cross-process locking is NOT claimed (single authority by design).
+     */
+    this.refreshInflight = null;
+    /** Generation counter: re-auth/logout invalidate in-flight refreshes. */
+    this.tokenGeneration = 0;
   }
 
   setStatus(s, error = null) {
@@ -111,6 +125,40 @@ export class YouTubeAdapter {
     if (this.tokens && !this.client) this.setStatus(STATUS.DISCONNECTED);
     else if (this.tokens) this.setStatus(STATUS.CONNECTED);
     else this.setStatus(this.client ? STATUS.AUTH_REQUIRED : STATUS.DISCONNECTED);
+  }
+
+  // ---- credential application (T4F-C2.7-C cloud flow) ----
+
+  /** Token save target: encrypted repository hook when set, else the file. */
+  async _persistTokens(tokens) {
+    if (this.persistTokens) {
+      await this.persistTokens(tokens);
+      return;
+    }
+    await saveTokens(this.tokenPath, tokens);
+  }
+
+  /**
+   * Apply a credential object from the encrypted repository (or any
+   * validated {access_token, refresh_token, expires_at} grant). Resets
+   * outbound to unknown (new grant, unproven) and marks CONNECTED when a
+   * client is configured — same post-conditions as a fresh handleCallback.
+   */
+  applyCredentials(creds) {
+    this.tokenGeneration += 1;
+    if (!creds || typeof creds.access_token !== "string" || !creds.access_token) {
+      this.tokens = null;
+      this.outbound = "unknown";
+      this.setStatus(this.client ? STATUS.AUTH_REQUIRED : STATUS.DISCONNECTED);
+      return;
+    }
+    this.tokens = {
+      access_token: creds.access_token,
+      refresh_token: creds.refresh_token ?? null,
+      expires_at: creds.expires_at ?? 0,
+    };
+    this.outbound = "unknown";
+    this.setStatus(STATUS.CONNECTED);
   }
 
   // Tiny restart guard: remember the newest observed platform message per
@@ -164,7 +212,8 @@ export class YouTubeAdapter {
       fresh.refresh_token = this.tokens.refresh_token;
     }
     this.tokens = fresh;
-    await saveTokens(this.tokenPath, fresh);
+    this.tokenGeneration += 1;
+    await this._persistTokens(fresh);
     this.outbound = "unknown"; // new grant: unproven until the first insert
     this.setStatus(STATUS.CONNECTED);
   }
@@ -172,6 +221,7 @@ export class YouTubeAdapter {
   async logout() {
     this.disconnect();
     this.tokens = null;
+    this.tokenGeneration += 1;
     this.outbound = "unknown";
     await clearTokens(this.tokenPath);
     this.setStatus(this.client ? STATUS.AUTH_REQUIRED : STATUS.DISCONNECTED);
@@ -185,20 +235,47 @@ export class YouTubeAdapter {
       this.setStatus(STATUS.AUTH_REQUIRED, "refresh-unavailable");
       throw new Error("refresh-unavailable");
     }
-    try {
+    // Single-flight: concurrent callers (poll + send paths) share one
+    // refresh. Check-and-set is synchronous, so no two refreshes can start.
+    if (this.refreshInflight) return this.refreshInflight;
+    const gen = this.tokenGeneration;
+    const grantRefreshToken = this.tokens.refresh_token;
+    const client = this.client;
+    const fetchImpl = this.fetchImpl;
+    this.refreshInflight = (async () => {
       const fresh = await refreshAccessToken({
-        clientId: this.client.clientId,
-        clientSecret: this.client.clientSecret,
-        refreshToken: this.tokens.refresh_token,
-        fetchImpl: this.fetchImpl,
+        clientId: client.clientId,
+        clientSecret: client.clientSecret,
+        refreshToken: grantRefreshToken,
+        fetchImpl,
       });
-      this.tokens = { ...this.tokens, ...fresh };
-      await saveTokens(this.tokenPath, this.tokens);
+      if (this.tokenGeneration !== gen || !this.tokens) {
+        // Grant replaced (re-auth/logout) while refreshing: discard the
+        // stale result and serve whatever is current. Never clobber a
+        // newer grant with an older refresh response.
+        if (!this.tokens) throw new Error("not-authenticated");
+        return this.tokens.access_token;
+      }
+      // Rotation: adopt Google's replacement refresh token when issued,
+      // preserve the stored one when omitted (same rule as handleCallback).
+      this.tokens = { ...this.tokens, ...fresh, refresh_token: fresh.refresh_token ?? this.tokens.refresh_token };
+      await this._persistTokens(this.tokens);
       return this.tokens.access_token;
+    })();
+    try {
+      return await this.refreshInflight;
     } catch (e) {
-      this.tokens = null;
-      this.setStatus(STATUS.AUTH_REQUIRED, String(e?.message ?? e));
+      // Existing T3 semantics preserved: a failed refresh kills the grant
+      // (unless already superseded) and parks status at AUTH_REQUIRED.
+      if (this.tokenGeneration === gen) {
+        this.tokens = null;
+        this.setStatus(STATUS.AUTH_REQUIRED, String(e?.message ?? e));
+      }
       throw e;
+    } finally {
+      // Safe: no second refresh can have started while this one was
+      // in-flight (see check-and-set above), so clearing is unambiguous.
+      this.refreshInflight = null;
     }
   }
 

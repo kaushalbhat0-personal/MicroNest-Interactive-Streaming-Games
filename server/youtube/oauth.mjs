@@ -53,8 +53,14 @@ export async function refreshAccessToken({ clientId, clientSecret, refreshToken,
   });
   if (!res.ok) throw new Error(`token-refresh-failed:${res.status}`);
   const tokens = await res.json();
+  if (!tokens || typeof tokens.access_token !== "string" || !tokens.access_token) {
+    throw new Error("token-refresh-failed:invalid-response");
+  }
   return {
     access_token: tokens.access_token,
+    // Google usually omits a replacement refresh token (null = keep the
+    // stored one); when it issues one, the caller must adopt it.
+    refresh_token: typeof tokens.refresh_token === "string" && tokens.refresh_token ? tokens.refresh_token : null,
     expires_at: Date.now() + (Number(tokens.expires_in ?? 3600) - 60) * 1000,
   };
 }

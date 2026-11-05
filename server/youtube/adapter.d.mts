@@ -48,6 +48,8 @@ export interface YouTubeAdapterOptions {
   onStatus?: (status: string) => void;
   client?: { clientId: string; clientSecret: string } | null;
   redirectUri?: string;
+  /** Optional encrypted-repository writer (cloud flow; file otherwise). */
+  persistTokens?: (tokens: { access_token: string; expires_at: number; refresh_token?: string | null }) => Promise<unknown>;
   /** Optional restart-guard cursor file (best-effort, never blocks polling). */
   cursorPath?: string | null;
 }
@@ -67,6 +69,10 @@ export class YouTubeAdapter {
   lastApi: { endpoint: string; status: number | null; at: string } | null;
   sendTimes: number[];
   sendChain: Promise<unknown>;
+  /** Shared in-progress refresh (single-flight; in-process only). */
+  refreshInflight: Promise<string> | null;
+  tokenGeneration: number;
+  onStatus: (status: string) => void;
   init(tokenPath: string): Promise<void>;
   loadCursor(): Promise<void>;
   saveCursor(): Promise<void>;
@@ -75,6 +81,9 @@ export class YouTubeAdapter {
   discover(): Promise<{ liveChatId: string; title: string } | null>;
   authUrl(): string | null;
   handleCallback(code: string): Promise<void>;
+  applyCredentials(creds: { access_token?: string; refresh_token?: string | null; expires_at?: number } | null): void;
+  accessToken(): Promise<string>;
+  api(path: string, params: Record<string, unknown>): Promise<any>;
   logout(): Promise<void>;
   connect(): Promise<AdapterState>;
   disconnect(): void;
