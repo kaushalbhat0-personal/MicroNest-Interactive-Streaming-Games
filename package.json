@@ -12,16 +12,23 @@
     "state-server": "node server/state-server.mjs",
     "authority-server": "npx tsx server/authority-server.ts",
     "dev:dual": "node server/persist-server.mjs & node server/state-server.mjs & npx tsx server/authority-server.ts & vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && npm run build:server",
+    "build:server": "esbuild server/authority-server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/authority-server.mjs",
+    "start": "node dist-server/authority-server.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "engines": {
+    "node": "22.x"
+  },
   "dependencies": {
+    "pg": "^8.23.1",
     "phaser": "^3.85.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
     "tsx": "^4.23.15",
     "typescript": "^5.6.3",
     "vite": "^6.0.3",

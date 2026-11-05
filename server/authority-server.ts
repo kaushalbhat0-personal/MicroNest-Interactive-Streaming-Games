@@ -80,6 +80,38 @@ import {
 import { TRANSPORT_PROTOCOL } from "../src/shared/transport-core";
 import { normalizeWorld, serialize } from "../src/persistence/store";
 import { bearerToken, resolveAuthorityToken, tokensEqual, TOKEN_FILE } from "./authority-token.mjs";
+import { applyCors, resolveCorsConfig } from "./cors.mjs";
+import { resolveListenerConfig } from "./listen.mjs";
+import { createStateTransport } from "./state-transport.mjs";
+import {
+  resolvePersistenceConfig,
+  requireAuthorityTokenEnv,
+  createPgPool,
+  redactDatabaseUrl,
+} from "./persistence/db-config.mjs";
+import { ensureMigrated } from "./persistence/migrate.mjs";
+import { DbWorldStore } from "./persistence/world-store.mjs";
+import { DbCredentialRepository } from "./persistence/credential-store.mjs";
+import { PgOAuthStateStore } from "./persistence/oauth-state-store.mjs";
+import { DbMetadataStore } from "./persistence/metadata-store.mjs";
+import { checkConnectivity } from "./persistence/storage.mjs";
+import { YouTubeAdapter } from "./youtube/adapter.mjs";
+import { OAuthStateStore } from "./youtube/oauth-state-store.mjs";
+import { CredentialRepository, decodeEncryptionKey } from "./youtube/credential-repository.mjs";
+import {
+  OAUTH_SCOPES,
+  OAUTH_SECURITY_HEADERS,
+  buildCorrelationSetCookie,
+  buildWebAuthUrl,
+  handleOAuthCallback,
+  hashCorrelation,
+  loadOAuthConfig,
+  mintCorrelationSecret,
+  parseCorrelationCookie,
+  renderLandingPage,
+  type ChannelIdentity,
+  type OAuthConfig,
+} from "./youtube/oauth-web.mjs";
 
 // ---------------------------------------------------------------------------
 // Small local mirrors (kept dependency-free: no browser modules server-side)
@@ -132,8 +164,31 @@ export interface AuthorityOpts {
   pollMs?: number;
   publishMs?: number;
   ytStatusMs?: number;
+  /** Transport for Google/YouTube server-to-server calls (tests stub this). */
+  fetchImpl?: typeof fetch;
+  /** OAuth Web Server flow config (tests/dev). Defaults to process.env. */
+  oauth?: {
+    clientId?: unknown;
+    clientSecret?: unknown;
+    redirectUri?: unknown;
+    encryptionKey?: unknown;
+    dashboardUrl?: unknown;
+    allowHttpLoopback?: boolean;
+  };
   /** Never exits the process on fatal boot errors (tests). */
   onFatal?: (message: string) => void;
+  /** Durable persistence selection (D1-C). Defaults to env PERSISTENCE_BACKEND / DATABASE_URL. */
+  persistenceBackend?: "file" | "postgres";
+  /** Overrides DATABASE_URL env (tests). */
+  databaseUrl?: string;
+  /** Injected database client {query} for postgres mode (unit tests). Skips pg pool creation. */
+  db?: { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }> };
+  /** Single-port state transport (D1-D). Defaults to env STATE_TRANSPORT ("external" preserves local dev). */
+  stateTransport?: "external" | "embedded";
+  /** Listener host override (tests). Defaults to HOST env / loopback dev / 0.0.0.0 prod. */
+  host?: string;
+  /** CORS origin allowlist override (tests). Defaults to CORS_ORIGINS env / dev defaults. */
+  corsOrigins?: string[];
 }
 
 export interface AuthorityHandle {
@@ -176,7 +231,6 @@ let activeAuthority: { stop: () => Promise<void> } | null = null;
 
 export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHandle> {
   if (activeAuthority) throw new Error("duplicate-authority: an authority is already active in this process");
-  const port = opts?.port ?? Number(process.argv[2] ?? 3004);
   const moduleRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
   const dataDir = opts?.dataDir ?? process.env.DATA_DIR ?? join(moduleRoot, "data");
   const stateUrl = (opts?.stateUrl ?? process.env.STATE_URL ?? "http://127.0.0.1:3003").replace(/\/$/, "");
@@ -187,9 +241,6 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   const startedAt = Date.now();
 
   await mkdir(dataDir, { recursive: true });
-  // Mutable: operator rotation replaces the value at runtime (the file
-  // stays the source of truth; the state server re-resolves per request).
-  let { token: authorityToken, generated: tokenGenerated } = await resolveAuthorityToken(dataDir);
 
   let lifecycle: AuthorityLifecycle = "starting";
   let lastError: string | null = null;
@@ -204,6 +255,176 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
     console.error(`[tidebound] authority failed: ${message}`);
     process.exit(1);
   };
+
+  // ---- D1-C durable persistence selection (explicit, never silent fallback) ----
+  // File mode preserves historical behavior bit-for-bit. Postgres mode
+  // requires DATABASE_URL + AUTHORITY_TOKEN env and fails boot visibly when
+  // the database is unavailable (never falls back to ephemeral files, never
+  // boots an empty world on outage). The lock file below is intentionally
+  // NOT migrated (ephemeral single-instance guard, not durable data).
+  const persistenceEnv = {
+    ...process.env,
+    ...(opts?.persistenceBackend !== undefined ? { PERSISTENCE_BACKEND: opts.persistenceBackend } : {}),
+    ...(opts?.databaseUrl !== undefined ? { DATABASE_URL: opts.databaseUrl } : {}),
+  };
+  const persistenceResolved = resolvePersistenceConfig(persistenceEnv);
+  if (!persistenceResolved.ok) {
+    fail(`persistence-misconfigured:${persistenceResolved.reason}`);
+  }
+  const persistenceBackend = persistenceResolved.ok && persistenceResolved.config.backend === "postgres" ? "postgres" : "file";
+  const isPostgres = persistenceBackend === "postgres";
+  // Postgres pool handle (real pg Pool or injected test client). File mode
+  // never touches the driver.
+  let pgPool: { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>>; rowCount?: number }>; end?: () => Promise<void> } | null = null;
+  let dbWorld: DbWorldStore | null = null;
+  let dbMeta: DbMetadataStore | null = null;
+
+  // ---- D1-D single-port listener + CORS + transport topology ----
+  // Render exposes ONE public HTTP port. Local dev keeps two processes
+  // (authority :3004 + state transport :3003, both loopback). The Render
+  // topology mounts the state transport INSIDE this listener (embedded) so
+  // dashboard control, OAuth, snapshots, and SSE share one port with no
+  // second service and no reverse proxy. Production requires embedded
+  // explicitly (fail-closed config, never a silent split topology).
+  const nodeEnv = typeof process.env.NODE_ENV === "string" ? process.env.NODE_ENV : "";
+  const isProdEnv = nodeEnv === "production";
+  const stateTransportMode =
+    opts?.stateTransport ?? (typeof process.env.STATE_TRANSPORT === "string" && process.env.STATE_TRANSPORT !== "" ? process.env.STATE_TRANSPORT : "external");
+  if (stateTransportMode !== "external" && stateTransportMode !== "embedded") {
+    fail("transport-misconfigured:STATE_TRANSPORT must be external|embedded");
+  }
+  if (isProdEnv && stateTransportMode !== "embedded") {
+    fail("transport-misconfigured:production requires STATE_TRANSPORT=embedded (single public listener)");
+  }
+  const isEmbeddedTransport = stateTransportMode === "embedded";
+  const corsEnv =
+    opts?.corsOrigins !== undefined
+      ? { ...process.env, CORS_ORIGINS: opts.corsOrigins.join(",") }
+      : process.env;
+  const corsResolved = resolveCorsConfig(corsEnv);
+  if (!corsResolved.ok) {
+    fail(`cors-misconfigured:${corsResolved.reason}`);
+  }
+  const corsOrigins = corsResolved.ok ? corsResolved.origins : [];
+  const argvPort = process.argv[2] !== undefined ? Number(process.argv[2]) : undefined;
+  const listener = resolveListenerConfig({
+    defaultPort: 3004,
+    env: process.env,
+    argvPort: opts?.port ?? argvPort,
+    overrides: opts?.host !== undefined ? { host: opts.host } : undefined,
+  });
+  if (!listener.ok) {
+    fail(`listener-misconfigured:${listener.reason}`);
+  }
+  const { host: listenHost, port } = listener.ok ? listener : { host: "127.0.0.1", port: 3004 };
+
+  // Mutable: operator rotation replaces the value at runtime. File mode: the
+  // file stays the source of truth (state server re-resolves per request).
+  // Postgres mode: the AUTHORITY_TOKEN env (Render secret) is the source of
+  // truth — generating an ephemeral file token on an ephemeral filesystem
+  // would silently lock the operator out on every restart, so absence fails
+  // boot instead (deployment blocker, never plaintext in the database).
+  let authorityToken: string;
+  let tokenGenerated = false;
+  if (isPostgres) {
+    const tok = requireAuthorityTokenEnv(process.env);
+    if (!tok.ok) {
+      fail("authority-token-required:set AUTHORITY_TOKEN as a Render secret (shared by authority + state server); refusing to generate an ephemeral bearer on ephemeral storage");
+    }
+    authorityToken = (tok as { ok: true; token: string }).token;
+    const cfg = (persistenceResolved as { ok: true; config: { backend: string; databaseUrl: string } }).config;
+    if (opts?.db) {
+      pgPool = opts.db;
+    } else {
+      const created = await createPgPool(cfg as never);
+      if (!created.ok) {
+        fail(`database-unavailable:${created.reason} (${redactDatabaseUrl(cfg.databaseUrl)})`);
+      }
+      pgPool = (created as unknown as { ok: true; pool: typeof pgPool }).pool;
+    }
+    const conn = await checkConnectivity(pgPool as never);
+    if (!conn.ok) {
+      fail(`database-unavailable:${conn.detail ?? conn.reason} (${redactDatabaseUrl(cfg.databaseUrl)})`);
+    }
+    const migrated = await ensureMigrated(pgPool as never);
+    if (!migrated.ok) {
+      fail(`persistence-misconfigured:${migrated.reason}${migrated.reason === "migration-version-mismatch" ? `:db-v${(migrated as { version?: number }).version}` : ""}`);
+    }
+    dbWorld = new DbWorldStore({ db: pgPool as never, normalizeWorld, serialize });
+    dbMeta = new DbMetadataStore({ db: pgPool as never });
+  } else {
+    ({ token: authorityToken, generated: tokenGenerated } = await resolveAuthorityToken(dataDir));
+  }
+  const netFetch: typeof fetch = opts?.fetchImpl ?? fetch;
+
+  // ---- D1-D embedded state transport (single-port mode only) ----
+  // The same module as the standalone state server (identical seq, replay,
+  // recovery, read-only semantics). External mode keeps the historical
+  // stateUrl POST path untouched. Embedded mode publishes in-process via
+  // publishLocal (no HTTP hop, no second listener); the HTTP publish route
+  // below stays bearer-gated for compatibility. isAuthorized reads the live
+  // `authorityToken` variable so file-mode rotation takes effect immediately.
+  const embeddedTransport = isEmbeddedTransport
+    ? createStateTransport({ isAuthorized: (req) => tokensEqual(bearerToken(req as never), authorityToken) })
+    : null;
+
+  // ---- T4F-C2.7-C server-owned YouTube OAuth (Web Server flow) ----
+  // Optional and additive: when fully configured, the authority owns OAuth
+  // initiation, callback, encrypted persistence, and an embedded adapter.
+  // When absent/misconfigured, every legacy sidecar path below behaves
+  // exactly as before (local-dev loopback preserved).
+  const oauthInput = opts?.oauth ?? {
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri: process.env.GOOGLE_REDIRECT_URI,
+    encryptionKey: process.env.GOOGLE_TOKEN_ENCRYPTION_KEY,
+    dashboardUrl: process.env.DASHBOARD_URL,
+  };
+  const oauthLoaded = loadOAuthConfig(oauthInput);
+  const oauthCfg: OAuthConfig | null = oauthLoaded.ok ? oauthLoaded.config : null;
+  const oauthEnabled = oauthCfg !== null;
+  // File and postgres stores share the same method surface (create/consume,
+  // load/save/clear); the union below is structural — file mode is untouched.
+  let oauthState: OAuthStateStore | PgOAuthStateStore | null = null;
+  let oauthRepo: CredentialRepository | DbCredentialRepository | null = null;
+  let oauthPendingRepo: CredentialRepository | DbCredentialRepository | null = null;
+  let oauthLast: { at: string | null; error: string | null } = { at: null, error: null };
+  const OAUTH_PENDING_META = "youtube-pending-channel.json";
+  let oauthActive = false;
+  if (oauthEnabled && oauthCfg) {
+    let keyOk = false;
+    try {
+      decodeEncryptionKey(oauthCfg.encryptionKey);
+      keyOk = true;
+    } catch {
+      keyOk = false;
+    }
+    if (keyOk) {
+      if (isPostgres && pgPool) {
+        // Postgres mode: encrypted envelopes in authority_credentials,
+        // hash-only nonces in oauth_state. No file fallback — outage fails
+        // boot (operator retries Connect after recovery).
+        const dbState = new PgOAuthStateStore({ db: pgPool as never });
+        const inited = await dbState.init();
+        if (!inited.ok) {
+          fail(`database-unavailable:oauth-state (${inited.reason})`);
+        }
+        oauthState = dbState;
+        oauthRepo = new DbCredentialRepository({ db: pgPool as never, id: "youtube-credentials", key: oauthCfg.encryptionKey });
+        oauthPendingRepo = new DbCredentialRepository({ db: pgPool as never, id: "youtube-pending-grant", key: oauthCfg.encryptionKey });
+      } else {
+        oauthState = new OAuthStateStore({ path: join(dataDir, "youtube-oauth-state.json") });
+        await oauthState.init();
+        oauthRepo = new CredentialRepository({ path: join(dataDir, "youtube-credentials.enc.json"), key: oauthCfg.encryptionKey });
+        oauthPendingRepo = new CredentialRepository({ path: join(dataDir, "youtube-pending-grant.enc.json"), key: oauthCfg.encryptionKey });
+      }
+      oauthActive = true;
+    } else {
+      console.log("[tidebound] youtube oauth disabled: encryption key unusable");
+    }
+  }
+
+  // (lifecycle/fail defined above in the D1-C persistence selection block)
 
   // ---- single-authority lock (no silent second authority) ----
   const lockPath = join(dataDir, LOCK_FILE);
@@ -223,7 +444,10 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   lockOwned = true;
 
   // ---- engine + session (exactly one; hook wired at construction) ----
-  const store = { persistFrom: "none" as "file" | "local" | "none" | "file-error" };
+  // persistFrom covers both backends: file mode ("file"/"file-error") and
+  // postgres mode ("postgres"/"db-error"). The dashboard maps both error
+  // values to a degraded display (additive; file behavior unchanged).
+  const store = { persistFrom: "none" as "file" | "local" | "none" | "file-error" | "postgres" | "db-error" };
   const feed = new FeedAggregator();
   const viewerFeed = new ViewerFeedStore();
   const banners = new BannerQueue();
@@ -261,24 +485,44 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   }
 
   // Restore persisted world BEFORE first snapshot (validated; explicit).
+  // File mode keeps its historical behavior (corrupt save -> explicit fresh
+  // genesis with "corrupt-save-fresh"). Postgres mode is stricter by design:
+  // genuinely absent state ("no-save") boots fresh genesis, but "corrupt" or
+  // "unavailable" FAIL boot — auto-wiping a production world or mistaking an
+  // outage for an empty world would be data loss (see storage.mjs policy).
   lifecycle = "recovering";
   let restoredWorld: ReturnType<typeof normalizeWorld> = null;
   let savePresent = false;
-  try {
-    const raw = await readFile(join(dataDir, SAVE_FILE), "utf8");
-    savePresent = true;
-    restoredWorld = normalizeWorld(JSON.parse(raw));
-  } catch {
-    restoredWorld = null;
+  if (isPostgres && dbWorld) {
+    const loaded = await dbWorld.load();
+    if (loaded.status === "ok") {
+      restoredWorld = loaded.world;
+      savePresent = true;
+    } else if (loaded.status === "no-save") {
+      restoredWorld = null;
+      savePresent = false;
+    } else if (loaded.status === "corrupt") {
+      fail(`world-corrupt: stored postgres world failed validation (operator must restore/repair; refusing silent genesis): ${loaded.error}`);
+    } else {
+      fail(`database-unavailable: world load failed (${loaded.error}); refusing to boot an empty world on outage`);
+    }
+  } else {
+    try {
+      const raw = await readFile(join(dataDir, SAVE_FILE), "utf8");
+      savePresent = true;
+      restoredWorld = normalizeWorld(JSON.parse(raw));
+    } catch {
+      restoredWorld = null;
+    }
   }
   if (restoredWorld) {
     engine.loadWorld(restoredWorld);
-    engine.storyLog.unshift("World restored (file). Tidebound remembers.");
-    recoveredFrom = "file";
-    store.persistFrom = "file";
+    engine.storyLog.unshift(isPostgres ? "World restored (postgres). Tidebound remembers." : "World restored (file). Tidebound remembers.");
+    recoveredFrom = isPostgres ? "postgres" : "file";
+    store.persistFrom = isPostgres ? "postgres" : "file";
   } else {
     engine.loadWorld(tideboundGenesis());
-    recoveredFrom = savePresent ? "corrupt-save-fresh" : "fresh-genesis";
+    recoveredFrom = savePresent ? "corrupt-save-fresh" : isPostgres ? "postgres-fresh" : "fresh-genesis";
     if (savePresent) console.log("[tidebound] saved world invalid — booting explicit fresh genesis");
   }
 
@@ -334,7 +578,7 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
     timers.delete(t as ReturnType<typeof setInterval>);
   }
 
-  // ---- persistence (file only; the server has fs, no localStorage) ----
+  // ---- persistence (file or postgres; degraded mode never silent) ----
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleAutosave(): void {
     if (saveTimer) return;
@@ -343,7 +587,20 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
       void persistWorld();
     });
   }
-  async function persistWorld(): Promise<"file" | "file-error"> {
+  async function persistWorld(): Promise<"file" | "file-error" | "postgres" | "db-error"> {
+    if (isPostgres && dbWorld) {
+      // Degraded-continue policy (storage.mjs): a failed save keeps serving
+      // the last committed row, marks persistFrom "db-error" + lastError,
+      // and retries on the next mutation/shutdown. Never silent.
+      const out = await dbWorld.save(engine.world);
+      if (out.ok) {
+        store.persistFrom = "postgres";
+        return "postgres";
+      }
+      store.persistFrom = "db-error";
+      lastError = `persist-failed: ${out.reason}${out.detail ? `:${out.detail}` : ""}`;
+      return "db-error";
+    }
     try {
       await writeFile(join(dataDir, SAVE_FILE), serialize(engine.world), "utf8");
       store.persistFrom = "file";
@@ -375,6 +632,17 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   }
 
   async function postSnapshot(snap: SnapshotV1): Promise<{ ok: true; seq: number } | { ok: false; reason: string }> {
+    // Single-port mode: in-process publish (same validation/seq/buffer as
+    // the standalone server — one writer, no HTTP hop, no second listener).
+    if (isEmbeddedTransport && embeddedTransport) {
+      try {
+        const out = embeddedTransport.publishLocal(snap);
+        if (out.ok) return { ok: true, seq: out.seq };
+        return { ok: false, reason: out.reason };
+      } catch {
+        return { ok: false, reason: "state-transport-unavailable" };
+      }
+    }
     try {
       const res = await fetch(`${stateUrl}/api/state/publish`, {
         method: "POST",
@@ -393,6 +661,9 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   }
 
   async function fetchServerRev(): Promise<number | null> {
+    // Single-port mode: single writer, so stale-revision cannot occur and no
+    // revision bump is ever needed (publishOnce treats it as such).
+    if (isEmbeddedTransport && embeddedTransport) return null;
     try {
       const res = await fetch(`${stateUrl}/api/state/snapshot`, { headers: { accept: "application/json" } });
       if (!res.ok) return null;
@@ -435,6 +706,17 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   // ---- outbound announcements (T3 orchestration, server-side) ----
   async function ytSend(text: string, eventId: string): Promise<{ ok: true; duplicate?: boolean } | { ok: false; reason: string }> {
     if (text.length > 4096) return { ok: false, reason: "too-long" };
+    // Cloud OAuth mode: the embedded adapter sends directly (same typed
+    // results as the sidecar path below; no tokens leave the process).
+    if (oauthActive && embeddedYt) {
+      try {
+        const out = await embeddedYt.sendChatMessage({ text, eventId });
+        if (out.ok) return { ok: true, duplicate: !!out.duplicate };
+        return { ok: false, reason: out.error };
+      } catch {
+        return { ok: false, reason: "api-error" };
+      }
+    }
     try {
       const res = await fetch(`${ytUrl}/api/youtube/send`, {
         method: "POST",
@@ -552,27 +834,272 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
 
   // (Single wiring point — no other result path exists.)
 
+  // ---- T4F-C2.7-C embedded YouTube adapter (cloud OAuth mode only) ----
+  // When OAuth is configured, the authority owns the adapter directly
+  // (encrypted repository credentials, in-process poll loop). Otherwise the
+  // legacy sidecar-SSE path below is used untouched. Exactly one ingestion
+  // path is ever active: source switches stop the other first.
+  let embeddedYt: YouTubeAdapter | null = null;
+  function ensureEmbedded(): YouTubeAdapter | null {
+    if (!oauthActive || !oauthCfg || !oauthRepo) return null;
+    if (!embeddedYt) {
+      const cfg = oauthCfg;
+      const repo = oauthRepo;
+      embeddedYt = new YouTubeAdapter({
+        fetchImpl: netFetch,
+        onEvents: (events) => {
+          for (const ev of events) ingestSidecarEvent(ev, String((ev as { eventId?: unknown }).eventId ?? ""));
+        },
+        onStatus: () => {},
+        client: { clientId: cfg.clientId, clientSecret: cfg.clientSecret },
+        redirectUri: cfg.redirectUri,
+        // Postgres mode disables the file cursor (ephemeral filesystem);
+        // the resume pointer lives in authority_metadata instead (patched
+        // below). File mode keeps the historical file path untouched.
+        cursorPath: isPostgres ? null : join(dataDir, "youtube-adapter-cursor.json"),
+        persistTokens: async (t) => {
+          // Refresh persistence merges into the stored grant: tokens rotate,
+          // while scopes/channel/obtainedAt are preserved server-side.
+          // A database outage here never deletes the previous grant: the
+          // adapter keeps serving it and the next refresh retries.
+          let prev: Record<string, unknown> | null = null;
+          try {
+            prev = (await repo.load()) as Record<string, unknown> | null;
+          } catch {
+            prev = null;
+          }
+          const at = typeof t.access_token === "string" ? t.access_token : "";
+          if (!at) return;
+          try {
+            await repo.save({
+              access_token: at,
+              refresh_token: typeof t.refresh_token === "string" ? t.refresh_token : ((prev?.refresh_token as string | null | undefined) ?? null),
+              expires_at: typeof t.expires_at === "number" ? t.expires_at : Date.now(),
+              scopes: Array.isArray(prev?.scopes) ? (prev.scopes as string[]) : [...OAUTH_SCOPES],
+              channel: (prev?.channel as ChannelIdentity | null | undefined) ?? null,
+              obtainedAt: typeof prev?.obtainedAt === "number" ? (prev.obtainedAt as number) : Date.now(),
+              updatedAt: Date.now(),
+            });
+          } catch {
+            // Outage during refresh persistence: keep the previous grant
+            // (fail closed, retry later). Never delete on write failure.
+            oauthLast = { at: oauthLast.at, error: "credential-persist-unavailable" };
+          }
+        },
+      });
+      if (isPostgres && dbMeta) {
+        // Postgres mode: mirror the adapter's best-effort cursor into the
+        // allowlisted metadata row (same resume semantics, durable). A
+        // cursor write failure must never block polling (dedup degrades to
+        // engine-level dedup; bounded re-forward is safe).
+        const meta = dbMeta;
+        const adapter = embeddedYt;
+        adapter.saveCursor = async () => {
+          try {
+            const c = (adapter as unknown as { cursor?: { liveChatId?: unknown; platformId?: unknown; publishedAt?: unknown } | null }).cursor;
+            if (c && typeof c.liveChatId === "string" && typeof c.platformId === "string") {
+              await meta.set("youtube-adapter-cursor", {
+                liveChatId: c.liveChatId,
+                platformId: c.platformId,
+                publishedAt: typeof c.publishedAt === "string" ? c.publishedAt : new Date().toISOString(),
+              });
+            }
+          } catch {
+            /* cursor is best-effort; polling must not die */
+          }
+        };
+      }
+    }
+    return embeddedYt;
+  }
+  async function resumeEmbedded(): Promise<void> {
+    const adapter = ensureEmbedded();
+    if (!adapter || !oauthRepo) return;
+    // Postgres mode: restore the durable adapter cursor before applying
+    // credentials (same resume semantics as the file cursor it replaces).
+    if (isPostgres && dbMeta) {
+      try {
+        const saved = await dbMeta.get("youtube-adapter-cursor");
+        if (saved && typeof saved.liveChatId === "string" && typeof saved.platformId === "string") {
+          (adapter as unknown as { cursor?: unknown }).cursor = {
+            liveChatId: saved.liveChatId,
+            platformId: saved.platformId,
+            publishedAt: typeof saved.publishedAt === "string" ? saved.publishedAt : new Date().toISOString(),
+          };
+        }
+      } catch {
+        /* corrupt/outage cursor: start without resume (engine dedups) */
+      }
+    }
+    try {
+      const creds = await oauthRepo.load();
+      adapter.applyCredentials(creds as { access_token?: string; refresh_token?: string | null; expires_at?: number } | null);
+      if (creds && typeof creds === "object") {
+        const updatedAt = (creds as { updatedAt?: unknown }).updatedAt;
+        if (typeof updatedAt === "number") oauthLast = { at: new Date(updatedAt).toISOString(), error: null };
+      }
+    } catch {
+      // Corrupt/wrong-key file — or postgres outage/unreadable envelope:
+      // fail closed to AUTH_REQUIRED, never crash boot, never delete.
+      adapter.applyCredentials(null);
+      oauthLast = { at: oauthLast.at, error: "credential-store-unreadable" };
+    }
+  }
+  /** Non-secret summary of the stored grant for retention/mismatch decisions. */
+  async function oauthCurrentSummary(): Promise<{ refresh_token?: string | null; obtainedAt?: number; channel?: { id?: string } | null } | null> {
+    if (!oauthRepo) return null;
+    try {
+      const c = (await oauthRepo.load()) as null | {
+        refresh_token?: string | null;
+        obtainedAt?: number;
+        channel?: { id?: string } | null;
+      };
+      if (!c) return null;
+      return {
+        refresh_token: typeof c.refresh_token === "string" ? c.refresh_token : null,
+        obtainedAt: typeof c.obtainedAt === "number" ? c.obtainedAt : undefined,
+        channel: c.channel && typeof c.channel === "object" ? { id: typeof c.channel.id === "string" ? c.channel.id : undefined } : null,
+      };
+    } catch {
+      return null;
+    }
+  }
+  async function readPendingMeta(): Promise<{ newChannel: ChannelIdentity; previousChannelId: string; at: string } | null> {
+    if (isPostgres && dbMeta) {
+      try {
+        const v = await dbMeta.get("youtube-pending-channel");
+        if (v && typeof v.previousChannelId === "string" && v.newChannel && typeof v.newChannel === "object") {
+          return { newChannel: v.newChannel as ChannelIdentity, previousChannelId: v.previousChannelId, at: typeof v.at === "string" ? v.at : "" };
+        }
+      } catch {
+        /* corrupt/outage: fail closed (no pending switch claimed) */
+      }
+      return null;
+    }
+    try {
+      const raw = await readFile(join(dataDir, OAUTH_PENDING_META), "utf8");
+      const p = JSON.parse(raw) as { newChannel?: unknown; previousChannelId?: unknown; at?: unknown };
+      if (p && typeof p.previousChannelId === "string" && p.newChannel && typeof p.newChannel === "object") {
+        return { newChannel: p.newChannel as ChannelIdentity, previousChannelId: p.previousChannelId, at: typeof p.at === "string" ? p.at : "" };
+      }
+    } catch {
+      /* no pending switch */
+    }
+    return null;
+  }
+  async function clearPending(): Promise<void> {
+    if (oauthPendingRepo) {
+      try {
+        await oauthPendingRepo.clear();
+      } catch {
+        /* best-effort */
+      }
+    }
+    if (isPostgres && dbMeta) {
+      try {
+        await dbMeta.delete("youtube-pending-channel");
+      } catch {
+        /* already absent / outage best-effort */
+      }
+      return;
+    }
+    try {
+      await unlink(join(dataDir, OAUTH_PENDING_META));
+    } catch {
+      /* already absent */
+    }
+  }
+  async function oauthStatusPayload(): Promise<Record<string, unknown>> {
+    const pending = await readPendingMeta();
+    let connected = false;
+    let channel: ChannelIdentity | null = null;
+    let lastAuthAt: string | null = oauthLast.at;
+    if (oauthRepo) {
+      try {
+        const c = (await oauthRepo.load()) as null | { channel?: ChannelIdentity | null; updatedAt?: unknown };
+        if (c) {
+          connected = true;
+          channel = c.channel && typeof c.channel === "object" ? (c.channel as ChannelIdentity) : null;
+          if (typeof c.updatedAt === "number") lastAuthAt = new Date(c.updatedAt).toISOString();
+        }
+      } catch {
+        connected = false;
+      }
+    }
+    const adapterState = embeddedYt ? embeddedYt.getState() : null;
+    return {
+      configured: oauthActive,
+      connected,
+      outbound: adapterState && typeof adapterState.outbound === "string" ? adapterState.outbound : "unknown",
+      ytStatus: adapterState && typeof adapterState.status === "string" ? adapterState.status : null,
+      authenticated: adapterState ? !!adapterState.authenticated : connected,
+      channel,
+      pendingChannel: pending,
+      lastAuthAt,
+      lastError: oauthLast.error,
+    };
+  }
+  async function embeddedConnect(): Promise<void> {
+    const adapter = ensureEmbedded();
+    if (!adapter) return;
+    stopIngestion();
+    try {
+      await adapter.connect();
+    } catch {
+      /* adapter records its own status; polling continues via its loop */
+    }
+    await refreshYtStatus();
+  }
+  function embeddedDisconnect(): void {
+    // Stop polling only. The encrypted grant is preserved (never deleted
+    // on disconnect; there is no forget/revoke endpoint in this milestone).
+    embeddedYt?.disconnect();
+  }
+
   // ---- YouTube ingestion (single sidecar SSE subscription) ----
   let ytReader: { abort: () => void } | null = null;
   let ytStatusTimer: ReturnType<typeof setInterval> | null = null;
   let ytCursor: string | null = null;
-  try {
-    const raw = await readFile(join(dataDir, CURSOR_FILE), "utf8");
-    const parsed = JSON.parse(raw) as { lastYtEventId?: unknown };
-    if (typeof parsed.lastYtEventId === "string") ytCursor = parsed.lastYtEventId;
-  } catch {
-    /* no cursor yet */
+  if (isPostgres && dbMeta) {
+    // Durable resume pointer (same dedup semantics as the file cursor).
+    // Outage/corrupt at boot: start without resume (engine dedups).
+    try {
+      const saved = await dbMeta.get("authority-cursor");
+      if (saved && typeof saved.lastYtEventId === "string") ytCursor = saved.lastYtEventId;
+    } catch {
+      /* no cursor yet */
+    }
+  } else {
+    try {
+      const raw = await readFile(join(dataDir, CURSOR_FILE), "utf8");
+      const parsed = JSON.parse(raw) as { lastYtEventId?: unknown };
+      if (typeof parsed.lastYtEventId === "string") ytCursor = parsed.lastYtEventId;
+    } catch {
+      /* no cursor yet */
+    }
   }
   let cursorTimer: ReturnType<typeof setTimeout> | null = null;
   function scheduleCursorSave(): void {
     if (cursorTimer) return;
     cursorTimer = after(2000, () => {
       cursorTimer = null;
+      if (isPostgres && dbMeta) {
+        // Best-effort only: cursor loss degrades to engine dedup (safe).
+        void dbMeta.set("authority-cursor", { lastYtEventId: ytCursor }).catch(() => undefined);
+        return;
+      }
       void writeFile(join(dataDir, CURSOR_FILE), JSON.stringify({ lastYtEventId: ytCursor }), "utf8").catch(() => undefined);
     });
   }
 
   async function refreshYtStatus(): Promise<void> {
+    // Cloud OAuth mode: status comes from the embedded adapter (same state
+    // shape as the sidecar status below; no credentials included).
+    if (oauthActive && embeddedYt) {
+      const s = embeddedYt.getState() as unknown as typeof ytStatus;
+      ytStatus = s && typeof s.status === "string" ? s : { status: "DISCONNECTED", error: "bad-status" };
+      return;
+    }
     try {
       const res = await fetch(`${ytUrl}/api/youtube/status`, { headers: { accept: "application/json" } });
       if (!res.ok) throw new Error(`status:${res.status}`);
@@ -719,7 +1246,10 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
       meters: { paleChart: paleChartModel(game.world), beaconOil: beaconOilModel(game.world) },
       vexStage: vexModel(game.world).stage,
       yt: { lastStatus: ytStatus, diag: { ...diag } },
-      persist: { from: store.persistFrom },
+      persist: { from: store.persistFrom, backend: persistenceBackend },
+      persistenceBackend,
+      stateTransport: { mode: stateTransportMode, seq: embeddedTransport ? embeddedTransport.getSeq() : lastSeq },
+      listener: { host: listenHost, port },
       recoveredFrom,
       uptimeSec: Math.floor((Date.now() - startedAt) / 1000),
       timers: timers.size,
@@ -742,6 +1272,9 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
       queueSize: game.queue.size,
       recoveredFrom,
       persistFrom: store.persistFrom,
+      persistenceBackend,
+      stateTransport: stateTransportMode,
+      listener: { host: listenHost, port },
     };
   }
 
@@ -829,6 +1362,28 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   async function doReload(): Promise<{ ok: boolean; outcome: string }> {
     lifecycle = "recovering";
     try {
+      if (isPostgres && dbWorld) {
+        // Postgres reload: outage and corrupt are explicit failures (never
+        // silent genesis, never empty-world-on-outage). Genuinely absent is
+        // reload-no-save (same as file mode).
+        const loaded = await dbWorld.load();
+        if (loaded.status === "ok") {
+          game.loadWorld(loaded.world);
+          resetViewerPresentation();
+          game.storyLog.unshift("World reloaded (postgres).");
+          const opened = openStreamAndFire(game.world, TIDEBOUND_LIBRARY);
+          if (opened.ok) {
+            game.world = opened.world;
+            session = opened.session;
+            for (const d of opened.newDeeds) game.pushStory(d);
+          }
+          recoveredFrom = "reload-postgres";
+          return { ok: true, outcome: "reloaded-postgres" };
+        }
+        if (loaded.status === "no-save") return { ok: true, outcome: "reload-no-save" };
+        if (loaded.status === "corrupt") return { ok: true, outcome: "reload-invalid-save" };
+        return { ok: true, outcome: "reload-unavailable" };
+      }
       const raw = await readFile(join(dataDir, SAVE_FILE), "utf8");
       const state = normalizeWorld(JSON.parse(raw));
       if (state) {
@@ -866,6 +1421,16 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   }
 
   async function doRotateToken(): Promise<{ ok: boolean; outcome: string }> {
+    // Postgres mode: the bearer lives in the AUTHORITY_TOKEN env (Render
+    // secret shared by authority + state server) and is NEVER stored in the
+    // database in plaintext. Rotating via a file write here would diverge
+    // from the state server and be lost on the next ephemeral restart — so
+    // rotation is an explicit operator action (update the Render secret on
+    // both services and redeploy), not an API mutation. Documented as such;
+    // this endpoint refuses rather than weakening the boundary.
+    if (isPostgres) {
+      return { ok: false, outcome: "rotate-requires-env" };
+    }
     // Operator rotation / revocation / loss-recovery in one move: mint a
     // fresh credential, persist it as the file source of truth, adopt it
     // for this process. The state server re-resolves per request, so no
@@ -914,18 +1479,169 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
     return tokensEqual(bearerToken(req), authorityToken);
   }
 
+  // ---- D1-D health semantics (no secrets in any payload) ----
+  // Liveness (/api/healthz): the process answers. Readiness (/api/readyz):
+  // the authority initialized, required persistence connected/migrated, and
+  // the runtime serves. Degraded persistence (db-error/file-error) stays
+  // READY but is explicitly flagged (never misreported as healthy).
+  function degradedPersistence(): boolean {
+    return store.persistFrom === "db-error" || store.persistFrom === "file-error";
+  }
+
+  function readiness(): { code: number; body: Record<string, unknown> } {
+    if (lifecycle !== "running" && lifecycle !== "paused") {
+      return {
+        code: 503,
+        body: {
+          ready: false,
+          reason: lifecycle === "failed" ? (lastError ?? "failed") : "not-ready",
+          lifecycle,
+          persistenceBackend,
+          stateTransport: stateTransportMode,
+        },
+      };
+    }
+    return {
+      code: 200,
+      body: {
+        ready: true,
+        lifecycle,
+        persistence: { backend: persistenceBackend, from: store.persistFrom, degraded: degradedPersistence() },
+        stateTransport: { mode: stateTransportMode, seq: embeddedTransport ? embeddedTransport.getSeq() : lastSeq },
+      },
+    };
+  }
+
   const server = createServer(async (req, res) => {
-    res.setHeader("access-control-allow-origin", "*");
-    res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
-    res.setHeader("access-control-allow-headers", "content-type, authorization");
-    if (req.method === "OPTIONS") {
-      res.writeHead(204).end();
+    // Narrow CORS allowlist (D1-D): unknown origins are rejected here with
+    // 403 (no ACAO); allowed preflights end 204 here. Requests without an
+    // Origin header (curl, Render health checks) proceed header-free.
+    if (applyCors(req, res, corsOrigins).handled) return;
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+
+    // Liveness: process is alive (public, no secrets, no env values).
+    if (url.pathname === "/api/healthz" && req.method === "GET") {
+      sendJson(res, 200, { ok: true, service: "tidebound-authority" });
       return;
     }
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+
+    // Readiness: initialized + persistence ready (public, degraded explicit).
+    if (url.pathname === "/api/readyz" && req.method === "GET") {
+      const r = readiness();
+      sendJson(res, r.code, r.body);
+      return;
+    }
+
+    // Single-port state transport (embedded): snapshot/SSE reads stay
+    // public and read-only; publish stays bearer-gated inside the module.
+    // External mode: these paths 404 here (the standalone state server on
+    // :3003 serves them, exactly as before).
+    if (isEmbeddedTransport && embeddedTransport && url.pathname.startsWith("/api/state")) {
+      if (await embeddedTransport.handleRequest(req, res, url)) return;
+    }
 
     if (url.pathname === "/api/authority/status" && req.method === "GET") {
       sendJson(res, 200, publicStatus());
+      return;
+    }
+
+    const oauthCallbackPath = oauthActive && oauthCfg ? oauthCfg.redirectPath : null;
+
+    // Public: Google OAuth callback (Render-hosted redirect target). Google
+    // cannot present the authority bearer, so this route is protected by
+    // server state + browser correlation instead. Query values are never
+    // logged, never reflected, and tokens never leave the process.
+    if (oauthCallbackPath && url.pathname === oauthCallbackPath && req.method === "GET") {
+      if (!oauthActive || !oauthCfg || !oauthState || !oauthRepo || !oauthPendingRepo) {
+        for (const [k, v] of Object.entries(OAUTH_SECURITY_HEADERS)) res.setHeader(k, v);
+        res.writeHead(503, { "content-type": "text/html; charset=utf-8" }).end(renderLandingPage({ ok: false, reason: "oauth-not-configured" }, null));
+        return;
+      }
+      const cfg = oauthCfg;
+      const params = url.searchParams;
+      const rawCookie = Array.isArray(req.headers.cookie) ? req.headers.cookie.join("; ") : (req.headers.cookie ?? null);
+      const outcome = await handleOAuthCallback({
+        config: cfg,
+        stateStore: oauthState,
+        query: { code: params.get("code"), state: params.get("state"), error: params.get("error") },
+        cookieSecret: parseCorrelationCookie(rawCookie, { secure: cfg.isProd }),
+        fetchImpl: netFetch,
+        current: await oauthCurrentSummary(),
+        persistGrant: async (creds) => {
+          await (oauthRepo as CredentialRepository).save(creds);
+        },
+        stagePendingGrant: async ({ creds, newChannel, previousChannelId }) => {
+          await (oauthPendingRepo as CredentialRepository).save(creds);
+          if (isPostgres && dbMeta) {
+            // Pending-channel identity is non-secret channel metadata
+            // (allowlisted row); the grant itself stays encrypted above.
+            await dbMeta.set("youtube-pending-channel", { newChannel, previousChannelId, at: new Date().toISOString() });
+            return;
+          }
+          await writeFile(join(dataDir, OAUTH_PENDING_META), JSON.stringify({ newChannel, previousChannelId, at: new Date().toISOString() }), "utf8");
+        },
+      });
+      if (outcome.ok) {
+        await clearPending();
+        await resumeEmbedded();
+        oauthLast = { at: new Date().toISOString(), error: null };
+        if (source === "youtube") await embeddedConnect();
+        else await refreshYtStatus();
+      } else {
+        oauthLast = { at: oauthLast.at, error: outcome.reason };
+        await refreshYtStatus();
+      }
+      for (const [k, v] of Object.entries(OAUTH_SECURITY_HEADERS)) res.setHeader(k, v);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(renderLandingPage(outcome, cfg.dashboardUrl));
+      return;
+    }
+
+    // OAuth initiation via top-level form POST (Vercel dashboard -> Render).
+    // The bearer travels in the POST body because a top-level form cannot
+    // set an Authorization header and must never place it in a URL. The
+    // response sets the correlation cookie (first-party top-level context)
+    // and redirects the browser to Google. Bodies are never logged.
+    if (url.pathname === "/api/authority/youtube/oauth/start" && req.method === "POST") {
+      if (!oauthActive || !oauthCfg || !oauthState) {
+        sendJson(res, 503, { error: "oauth-not-configured" });
+        return;
+      }
+      const cfg = oauthCfg;
+      let raw = "";
+      try {
+        raw = await readBody(req);
+      } catch (e) {
+        sendJson(res, (e as Error).message === "too-long" || (e as { code?: string }).code === "too-long" ? 413 : 400, { error: "invalid-body" });
+        return;
+      }
+      let bodyToken: unknown = null;
+      try {
+        const ct = String(req.headers["content-type"] ?? "");
+        if (ct.includes("application/json")) {
+          const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+          bodyToken = parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>).token : null;
+        } else {
+          bodyToken = new URLSearchParams(raw).get("token");
+        }
+      } catch {
+        sendJson(res, 400, { error: "invalid-body" });
+        return;
+      }
+      const authed = authorized(req) || (typeof bodyToken === "string" && tokensEqual(bodyToken, authorityToken));
+      if (!authed) {
+        sendJson(res, 401, { error: "unauthorized" });
+        return;
+      }
+      try {
+        const secret = mintCorrelationSecret();
+        const state = await (oauthState as OAuthStateStore).create({ data: hashCorrelation(secret) });
+        const googleUrl = buildWebAuthUrl({ config: cfg, state });
+        res.setHeader("set-cookie", buildCorrelationSetCookie(secret, { secure: cfg.isProd }));
+        for (const [k, v] of Object.entries(OAUTH_SECURITY_HEADERS)) res.setHeader(k, v);
+        res.writeHead(303, { location: googleUrl }).end();
+      } catch {
+        sendJson(res, 500, { error: "oauth-start-failed" });
+      }
       return;
     }
 
@@ -937,6 +1653,15 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
 
     if (url.pathname === "/api/authority/dashboard" && req.method === "GET") {
       sendJson(res, 200, controlPlane());
+      return;
+    }
+
+    if (url.pathname === "/api/authority/youtube/oauth/status" && req.method === "GET") {
+      if (!oauthActive) {
+        sendJson(res, 200, { configured: false, connected: false });
+        return;
+      }
+      sendJson(res, 200, await oauthStatusPayload());
       return;
     }
 
@@ -984,7 +1709,7 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
         }
         if (path === "/api/authority/save") {
           const r = await persistWorld();
-          return sendJson(res, 200, { ok: r === "file", outcome: r });
+          return sendJson(res, 200, { ok: r === "file" || r === "postgres", outcome: r });
         }
         if (path === "/api/authority/reload") return sendJson(res, 200, await doReload());
         if (path === "/api/authority/reset") return sendJson(res, 200, await doReset());
@@ -992,14 +1717,25 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
         if (path === "/api/authority/source") {
           if (body.source !== "simulation" && body.source !== "youtube") return sendJson(res, 400, { error: "bad-source" });
           source = body.source;
-          if (source === "youtube") startIngestion();
-          else stopIngestion();
+          if (source === "youtube") {
+            if (oauthActive) await embeddedConnect();
+            else startIngestion();
+          } else {
+            if (oauthActive) embeddedDisconnect();
+            stopIngestion();
+          }
           return sendJson(res, 200, { ok: true, outcome: source, source });
         }
         if (path === "/api/authority/token/rotate") {
           return sendJson(res, 200, await doRotateToken());
         }
         if (path === "/api/authority/youtube/connect") {
+          // Cloud OAuth mode: the embedded adapter connects directly (same
+          // idempotent single-reader guard as the sidecar path below).
+          if (oauthActive) {
+            await embeddedConnect();
+            return sendJson(res, 200, { ok: true });
+          }
           try {
             const r = await fetch(`${ytUrl}/api/youtube/connect`, { method: "POST" });
             await refreshYtStatus();
@@ -1009,6 +1745,13 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
           }
         }
         if (path === "/api/authority/youtube/disconnect") {
+          // Cloud OAuth mode: stop polling only — the encrypted grant is
+          // preserved (no forget/revoke endpoint in this milestone).
+          if (oauthActive) {
+            embeddedDisconnect();
+            await refreshYtStatus();
+            return sendJson(res, 200, { ok: true });
+          }
           try {
             await fetch(`${ytUrl}/api/youtube/disconnect`, { method: "POST" });
           } catch {
@@ -1027,6 +1770,41 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
             return sendJson(res, 200, { url: null });
           }
         }
+        if (path === "/api/authority/youtube/oauth/confirm-channel") {
+          // Explicit recovery for a channel switch: confirm moves the staged
+          // pending grant into the live repository; cancel discards it.
+          // Nothing here contacts Google; no silent rebinds ever happen.
+          if (!oauthActive || !oauthRepo || !oauthPendingRepo) {
+            return sendJson(res, 200, { ok: false, reason: "oauth-not-configured" });
+          }
+          const pending = await readPendingMeta();
+          let staged: unknown = null;
+          try {
+            staged = await oauthPendingRepo.load();
+          } catch {
+            staged = null;
+          }
+          if (!pending || !staged) {
+            await clearPending();
+            return sendJson(res, 200, { ok: false, reason: "no-pending-channel" });
+          }
+          if (body.confirm === true) {
+            try {
+              await oauthRepo.save(staged);
+            } catch {
+              return sendJson(res, 200, { ok: false, reason: "persistence-failed" });
+            }
+            await clearPending();
+            await resumeEmbedded();
+            oauthLast = { at: new Date().toISOString(), error: null };
+            if (source === "youtube") await embeddedConnect();
+            else await refreshYtStatus();
+            return sendJson(res, 200, { ok: true, outcome: "channel-confirmed" });
+          }
+          await clearPending();
+          await refreshYtStatus();
+          return sendJson(res, 200, { ok: true, outcome: "channel-cancelled" });
+        }
       } catch (e) {
         return sendJson(res, 500, { error: "authority-error", detail: String((e as Error)?.message ?? e).slice(0, 120) });
       }
@@ -1043,11 +1821,22 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
   // for future default changes — never a second ingestion path.
   if ((source as string) === "youtube") startIngestion();
 
+  // Cloud OAuth mode: resume the stored grant into the embedded adapter
+  // (credentials only; polling starts on source selection as usual).
+  await resumeEmbedded();
+
   lifecycle = "running";
-  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", () => resolve()));
-  console.log(`[tidebound] authority server on http://127.0.0.1:${port} (lifecycle=running, recoveredFrom=${recoveredFrom})`);
+  // Exactly ONE public HTTP listener for this process (Render: 0.0.0.0:$PORT;
+  // local dev: 127.0.0.1:3004). No second listener exists — the state
+  // transport is either mounted here (embedded) or served by the separate
+  // local-dev state-server process (external, never started in production).
+  await new Promise<void>((resolve) => server.listen(port, listenHost, () => resolve()));
+  console.log(`[tidebound] authority server on http://${listenHost}:${port} (lifecycle=running, recoveredFrom=${recoveredFrom}, persistence=${persistenceBackend}, stateTransport=${stateTransportMode})`);
   if (tokenGenerated) {
     console.log("[tidebound] authority token GENERATED — copy it from data/authority-token.json into the dashboard token field (shown once here in provisioning terms only; the value is never printed)");
+  }
+  if (isPostgres) {
+    console.log("[tidebound] durable persistence: postgres (Render/Neon); ephemeral file fallback disabled; bearer from AUTHORITY_TOKEN env");
   }
   void publishOnce();
 
@@ -1057,11 +1846,25 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
     stopping = true;
     lifecycle = "stopped";
     stopIngestion();
+    // Cloud OAuth mode: halt the embedded poll loop (grant stays stored).
+    try {
+      embeddedDisconnect();
+    } catch {
+      /* shutdown best-effort */
+    }
     for (const t of [...timers]) clearTimer(t);
     try {
       await persistWorld();
     } catch {
       /* shutdown flush best-effort */
+    }
+    // Graceful order: end SSE streams + heartbeat timers first (renderers
+    // see a clean close and reconnect with `since`), then drain sockets,
+    // then close the single listener, then the database pool, then the lock.
+    try {
+      embeddedTransport?.close();
+    } catch {
+      /* transport drain best-effort */
     }
     // Drain keep-alive/SSE sockets first: close() alone waits for idle
     // connections (test clients, subscriber sockets) and would hang.
@@ -1071,6 +1874,15 @@ export async function startAuthority(opts?: AuthorityOpts): Promise<AuthorityHan
       /* drain best-effort */
     }
     await new Promise<void>((resolve) => server.close(() => resolve()));
+    // Postgres pool shutdown (file mode: pgPool is null; injected test
+    // clients have no end()). Never touches secrets.
+    if (pgPool && typeof (pgPool as { end?: unknown }).end === "function" && !opts?.db) {
+      try {
+        await (pgPool as { end: () => Promise<void> }).end();
+      } catch {
+        /* pool shutdown best-effort */
+      }
+    }
     if (lockOwned) {
       try {
         await unlink(lockPath);

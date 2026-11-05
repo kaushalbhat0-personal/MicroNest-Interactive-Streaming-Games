@@ -385,7 +385,8 @@ describe("UX-004 architecture audit", () => {
     expect((APP_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(0);
     expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
-    expect(Object.keys(pkg.dependencies ?? {})).toEqual(["phaser"]);
+    // D1-C authorizes exactly one server-only dependency: pg (see activity audit).
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
   });
 
   it("original handler payloads preserved (meaning unchanged)", () => {

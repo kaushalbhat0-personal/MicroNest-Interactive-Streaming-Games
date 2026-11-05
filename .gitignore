@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-server/
 # Local runtime state (world saves, chat cursor). Secrets are NOT here:
 # OAuth client JSON + tokens live in ~/.emberkeep (outside the repo).
 data/*.json
@@ -7,3 +8,9 @@ data/*.json
 # Local env overrides.
 .env
 .env.local
+# Single-instance lock (ephemeral, never commit).
+data/authority.lock
+# Local Playwright/MCP runtime logs.
+.playwright-mcp/
+# Generated Python bytecode.
+tools/__pycache__/

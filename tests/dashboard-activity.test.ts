@@ -430,7 +430,10 @@ describe("UX-005 architecture audit", () => {
     expect(APP_TS).toContain("pickLedgerFields(e)");
     expect(APP_TS).not.toContain("fetch(");
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
-    expect(Object.keys(pkg.dependencies ?? {})).toEqual(["phaser"]);
+    // D1-C authorizes exactly one server-only dependency: pg (node-postgres,
+    // pooled TLS driver for Neon; lazily imported server-side, never in the
+    // browser bundle). No other runtime dependencies are permitted.
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
   });
 
   it("Overview previews and Control Room wiring remain intact", () => {

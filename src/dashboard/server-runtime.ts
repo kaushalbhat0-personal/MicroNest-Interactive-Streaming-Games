@@ -199,6 +199,39 @@ export class ServerRuntime implements Runtime {
           ? ((r.data as { url: string }).url as string)
           : null;
       },
+      startWebOAuth: () => {
+        // Server-owned flow via top-level navigation: the bearer travels in
+        // the POST body (a form cannot set headers and must never use a URL
+        // token). The authority sets a first-party correlation cookie and
+        // redirects this tab to Google; the dashboard tab stays open.
+        try {
+          const token = getStoredToken();
+          if (!token) return;
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = "/api/authority/youtube/oauth/start";
+          form.target = "_blank";
+          const input = document.createElement("input");
+          input.type = "hidden";
+          input.name = "token";
+          input.value = token;
+          form.appendChild(input);
+          document.body.appendChild(form);
+          form.submit();
+          form.remove();
+        } catch {
+          /* navigation handoff must never break the panel */
+        }
+      },
+      oauthStatus: async () => {
+        try {
+          const r = await fetchJson("/api/authority/youtube/oauth/status", { headers: { ...this.authHeaders() } });
+          if (r.status === 200 && r.data && typeof r.data === "object") return r.data as Record<string, unknown>;
+          return null;
+        } catch {
+          return null;
+        }
+      },
       onStatus: (fn: (s: YtStatus) => void) => {
         this.ytListeners.add(fn);
         if (this.plane) {
@@ -329,7 +362,7 @@ export class ServerRuntime implements Runtime {
     if (r.status !== 200 || !r.data || typeof r.data !== "object") return false;
     this.plane = r.data as ControlPlane;
     try {
-      setPersistFrom(this.plane.persist?.from as "file" | "local" | "none" | undefined ?? "none");
+      setPersistFrom(this.plane.persist?.from as "file" | "local" | "none" | "postgres" | "db-error" | "file-error" | undefined ?? "none");
     } catch {
       /* panel state sync must never break refresh */
     }

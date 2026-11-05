@@ -137,7 +137,8 @@ describe("UX-007A render performance", () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
     };
-    expect(Object.keys(pkg.dependencies ?? {})).toEqual(["phaser"]);
+    // D1-C authorizes exactly one server-only dependency: pg (see activity audit).
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
   });
 });
 

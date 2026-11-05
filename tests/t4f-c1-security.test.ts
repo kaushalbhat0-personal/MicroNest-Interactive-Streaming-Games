@@ -96,10 +96,19 @@ describe("T4F-C1 — transport security posture (static audits)", () => {
     expect(VITE_CONFIG).toContain('"/api/state"');
   });
 
-  it("servers bind loopback only (no LAN exposure in dev)", () => {
+  it("servers bind loopback by default; production requires an explicit public bind", () => {
+    // D1-D: the listener host is resolved explicitly (server/listen.mjs):
+    // local dev defaults to loopback, production (NODE_ENV=production)
+    // requires 0.0.0.0 and a Render-injected PORT. The standalone state
+    // server stays a loopback-only local-dev process.
     expect(STATE_SERVER).toContain('listen(port, "127.0.0.1"');
     const SERVER_TS = readFileSync(join(ROOT, "server", "authority-server.ts"), "utf8");
-    expect(SERVER_TS).toContain('listen(port, "127.0.0.1"');
+    expect(SERVER_TS).toContain("resolveListenerConfig");
+    expect(SERVER_TS).toContain("127.0.0.1");
+    expect(SERVER_TS).toContain("0.0.0.0");
+    const LISTEN_SRC = readFileSync(join(ROOT, "server", "listen.mjs"), "utf8");
+    expect(LISTEN_SRC).toContain("host-must-be-public");
+    expect(LISTEN_SRC).toContain("port-required");
   });
 
   it("no credential flows into client bundles, URLs, or snapshots", () => {

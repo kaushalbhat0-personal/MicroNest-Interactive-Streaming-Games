@@ -117,6 +117,15 @@ export interface YtView {
   connect(): Promise<void>;
   disconnectServer(): Promise<void>;
   authUrl(): Promise<string | null>;
+  /**
+   * T4F-C2.7-C server-owned Web Server flow: top-level form POST to the
+   * Render authority start endpoint (bearer in the POST body, never a URL),
+   * which sets a first-party correlation cookie and redirects to Google.
+   * No credentials are constructed, stored, or received here.
+   */
+  startWebOAuth(): void;
+  /** Safe OAuth status (connected, channel, pending switch; never secrets). */
+  oauthStatus(): Promise<Record<string, unknown> | null>;
   onStatus(fn: (s: YtStatus) => void): () => void;
 }
 
@@ -171,14 +180,21 @@ export interface AnnounceState {
 }
 
 /** T4F-C1: persistence source is fed by the authority control plane. */
-export function setPersistFrom(from: "file" | "local" | "none" | "file-error"): void {
-  persistFrom = from === "file-error" ? "none" : from;
+export function setPersistFrom(from: "file" | "local" | "none" | "file-error" | "postgres" | "db-error"): void {
+  // D1-C: postgres success is durable (reported like file); both error
+  // values degrade to "none" in this browser-local signal (the dashboard
+  // surfaces the explicit degraded flag from the control plane separately).
+  if (from === "postgres") {
+    persistFrom = "postgres";
+    return;
+  }
+  persistFrom = from === "file-error" || from === "db-error" ? "none" : (from as "file" | "local" | "none" | "postgres");
 }
 
 // UX-003 persistence signal: last observed WorldStore destination. Recorded
 // from save()/load() return values only — save semantics never change, and
 // "local" is reported as info (browser-only), never as failure.
-let persistFrom: "file" | "local" | "none" = "none";
+let persistFrom: "file" | "local" | "none" | "postgres" = "none";
 
 // UX-003 sticky-preview offset cache: #game sticks below the sticky
 // header+alert wrapper whose height varies with the banner. Rewritten only
@@ -316,6 +332,18 @@ export function wirePanel(rt: Runtime, refreshPanel: () => void): void {
     if (srcYt.checked) useYouTube();
   };
   ($("btn-yt-auth") as HTMLButtonElement).onclick = async () => {
+    // Prefer the server-owned Web Server flow (top-level navigation, no URL
+    // tokens, no popup); fall back to the legacy loopback popup when the
+    // authority predates it or OAuth is unconfigured.
+    try {
+      const st = await rt.yt.oauthStatus();
+      if (st && st.configured === true) {
+        rt.yt.startWebOAuth();
+        return;
+      }
+    } catch {
+      /* fall through to the legacy popup below */
+    }
     const url = await rt.yt.authUrl();
     if (url) window.open(url, "_blank", "width=520,height=640");
     else flashOutcome("youtube sidecar not configured");

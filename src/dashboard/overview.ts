@@ -36,7 +36,7 @@ export interface NextActionInput {
   threatTone: string;
   cinderholmLost: boolean;
   /** Last observed WorldStore.save()/load() destination. "none" = unknown. */
-  persistFrom: "file" | "local" | "none";
+  persistFrom: "file" | "local" | "none" | "postgres";
 }
 
 export interface NextAction {
@@ -291,9 +291,12 @@ export function voteLine(v: VoteLineInput): string {
   return "No vote running.";
 }
 
-/** Honest persistence reporting: file vs browser-only vs unknown. */
+/** Honest persistence reporting: file vs postgres vs browser-only vs unknown. */
 export function persistLine(from: "file" | "local" | "none" | string): string {
   if (from === "file") return "Saves: file · data/world-state.json.";
+  if (from === "postgres") return "Saves: durable database (postgres).";
+  if (from === "db-error") return "Saves: database unavailable — running degraded (last committed world preserved).";
+  if (from === "file-error") return "Saves: file write failed — running degraded.";
   if (from === "local") return "Saves: this browser only — start the persist server for file saves.";
   return "Saves: nothing saved yet this session.";
 }

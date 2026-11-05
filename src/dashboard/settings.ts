@@ -144,11 +144,17 @@ export function sourceLine(source: "simulation" | "youtube"): string {
   return source === "youtube" ? "Input source: YouTube Live." : "Input source: Simulation.";
 }
 
-export type PersistFrom = "file" | "local" | "none";
+export type PersistFrom = "file" | "local" | "none" | "postgres" | "db-error" | "file-error";
 
 export function persistStateLine(from: PersistFrom | string): { line: string; tone: "ok" | "info" | "unknown" } {
   if (from === "file") {
     return { line: "Saves: file · data/world-state.json via the persist server.", tone: "ok" };
+  }
+  if (from === "postgres") {
+    return { line: "Saves: durable database (postgres) — survives restarts and redeploys.", tone: "ok" };
+  }
+  if (from === "db-error" || from === "file-error") {
+    return { line: "Saves: persistence unavailable — running degraded (last committed world preserved).", tone: "info" };
   }
   if (from === "local") {
     return {
