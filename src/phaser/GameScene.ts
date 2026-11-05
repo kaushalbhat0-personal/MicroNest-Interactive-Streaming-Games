@@ -9,6 +9,8 @@ import {
   allKeeperFrames,
   keeperAnimKey,
   keeperFrame,
+  keeperIsStationaryPose,
+  keeperStationaryFrame,
   resolveKeeperOneShot,
   resolveKeeperPose,
   resolveKeeperPreview,
@@ -410,7 +412,8 @@ export class GameScene extends Phaser.Scene {
     if (r.visual.healHero) {
       const p = this.healAnchor();
       this.burst(p.x, p.y + 20, 0x43ff9a);
-      this.tweens.add({ targets: this.hero, scale: 1.1, duration: 160, yoyo: true });
+      // W1-R: the Keeper container holds position (no scale pulse); the
+      // stern-lantern flare below carries the heal read.
       this.tweens.add({ targets: this.skiffLantern, scale: 1.8, duration: 220, yoyo: true });
     }
     if (r.visual.shieldKeep) {
@@ -947,6 +950,20 @@ export class GameScene extends Phaser.Scene {
     if (!shouldSwitchAnim(this.keeperAnim, key) && sprite.anims.isPlaying) return;
     const def = KEEPER_POSES[pose];
     this.keeperAnim = key;
+    // W1-R stationary Keeper: persistent poses hold one approved frame.
+    // Looping idle/shield repaints cape/hand/lantern per drawing and reads
+    // as locomotion, so the scene displays frame 0 instead of playing the
+    // loop. The environment (sea/cloud/beam/mist) carries motion. One-shot
+    // result poses bypass this branch via def.oneShot and still play once.
+    // The dev-only preview lock stays exempt for atlas observation.
+    if (!this.keeperPreview && keeperIsStationaryPose(pose)) {
+      const still = keeperStationaryFrame(pose);
+      if (sprite.frame.name === still && !sprite.anims.isPlaying) return;
+      sprite.stop();
+      sprite.setTexture(KEEPER_ATLAS_KEY, still);
+      this.keeperOneShot = false;
+      return;
+    }
     if (this.reducedMotion) {
       sprite.stop();
       sprite.setTexture(KEEPER_ATLAS_KEY, keeperFrame(pose, 0));

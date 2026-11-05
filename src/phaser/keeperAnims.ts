@@ -123,3 +123,29 @@ export function keeperManifestUrl(): string | null {
   const entry = ART_MANIFEST.atlases.find((a) => a.key === KEEPER_ATLAS_KEY);
   return entry ? entry.jsonUrl : null;
 }
+
+/**
+ * W1-R — stationary Keeper contract (presentation-only).
+ *
+ * The approved atlas idle/shield cycles repaint cape, hand and lantern
+ * geometry every frame (idle centroids drift ~22px across the four
+ * drawings), so looping them reads as locomotion. The Keeper must stay
+ * planted while the environment carries motion, so persistent poses hold
+ * a single approved frame (frame 0, feet-planted). One-shot poses
+ * (strike/mend/interact) still play once as transient result feedback;
+ * the dev-only `?keeperPreview=` lock stays exempt so atlas motion
+ * remains observable. Atlas data in KEEPER_POSES is unchanged.
+ */
+export const KEEPER_STATIONARY_POSES: readonly KeeperPose[] = ["idle", "shield"];
+
+export function keeperIsStationaryPose(pose: KeeperPose): boolean {
+  return pose === "idle" || pose === "shield";
+}
+
+/** Approved display frame for a stationary pose (frame 0). */
+export function keeperStationaryFrame(pose: KeeperPose): string {
+  if (!keeperIsStationaryPose(pose)) {
+    throw new RangeError(`keeperStationaryFrame(${pose}): stationary poses are idle, shield only`);
+  }
+  return keeperFrame(pose, 0);
+}
