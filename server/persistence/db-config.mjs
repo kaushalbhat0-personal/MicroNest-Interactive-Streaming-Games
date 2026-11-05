@@ -96,6 +96,12 @@ export function resolvePersistenceConfig(env = process.env) {
     return { ok: false, reason: "database-url-required" };
   }
   const requireTls = !isLocalHost(parsed.hostname);
+  // Pooled (PgBouncer, `-pooler` host) vs direct: PgBouncer in transaction
+  // mode rejects unknown startup parameters, so the `options=-c
+  // statement_timeout=...` guard used for direct connections cannot be sent
+  // on pooled connections. Pooled pools get a client-side `query_timeout`
+  // instead (same bound, PgBouncer-safe); direct keeps the server-side guard.
+  const isPooled = parsed.hostname.includes("-pooler");
   return {
     ok: true,
     config: {
@@ -105,6 +111,7 @@ export function resolvePersistenceConfig(env = process.env) {
       databaseUrl,
       host: parsed.hostname,
       requireTls,
+      isPooled,
       pool: { ...DEFAULT_POOL },
       statementTimeoutMs: STATEMENT_TIMEOUT_MS,
     },
@@ -119,17 +126,27 @@ export function resolvePersistenceConfig(env = process.env) {
 export function poolOptionsFor(config) {
   if (!config || config.backend !== "postgres") throw new Error("persistence-not-postgres");
   const ssl = config.requireTls ? { rejectUnauthorized: true } : undefined;
+  const pooled = config.isPooled === true || (typeof config.host === "string" && config.host.includes("-pooler"));
+  const timeoutMs = config.statementTimeoutMs ?? STATEMENT_TIMEOUT_MS;
   const options = {
     connectionString: config.databaseUrl,
     max: config.pool?.max ?? DEFAULT_POOL.max,
     min: config.pool?.min ?? DEFAULT_POOL.min,
     idleTimeoutMillis: config.pool?.idleTimeoutMillis ?? DEFAULT_POOL.idleTimeoutMillis,
     connectionTimeoutMillis: config.pool?.connectionTimeoutMillis ?? DEFAULT_POOL.connectionTimeoutMillis,
+  };
+  if (pooled) {
+    // PgBouncer (transaction mode) rejects `options` startup parameters, so
+    // the per-statement bound is enforced client-side instead. Same 5 s
+    // budget: a suspended Neon compute surfaces as a query error the
+    // authority can handle instead of hanging the pump/publish loops.
+    options.query_timeout = timeoutMs;
+  } else {
     // Bound every statement so a suspended Neon compute (CU/egress
     // exhausted, or cold resume stall) surfaces as an error the authority
     // can handle instead of hanging the pump/publish loops.
-    options: `-c statement_timeout=${config.statementTimeoutMs ?? STATEMENT_TIMEOUT_MS}`,
-  };
+    options.options = `-c statement_timeout=${timeoutMs}`;
+  }
   if (ssl) options.ssl = ssl;
   return options;
 }

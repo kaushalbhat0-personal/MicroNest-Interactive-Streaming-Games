@@ -13,7 +13,7 @@
     "authority-server": "npx tsx server/authority-server.ts",
     "dev:dual": "node server/persist-server.mjs & node server/state-server.mjs & npx tsx server/authority-server.ts & vite",
     "build": "tsc --noEmit && vite build && npm run build:server",
-    "build:server": "esbuild server/authority-server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/authority-server.mjs",
+    "build:server": "esbuild server/authority-server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-server/authority-server.mjs && node -e \"const{mkdirSync,cpSync}=require('fs');mkdirSync('dist-server/migrations',{recursive:true});cpSync('server/persistence/migrations/001_init.sql','dist-server/migrations/001_init.sql')\"",
     "start": "node dist-server/authority-server.mjs",
     "preview": "vite preview",
     "test": "vitest run",
@@ -23,6 +23,8 @@
     "node": "22.x"
   },
   "dependencies": {
+    "@neon/config": "^1.11.3",
+    "@neon/env": "^1.6.15",
     "pg": "^8.23.1",
     "phaser": "^3.85.0"
   },

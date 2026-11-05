@@ -82,7 +82,7 @@ Render Free is production-reliable — this phase proves compatibility only.
 
 | | Render (prod) | Local dev |
 |---|---|---|
-| Command | build: `npm run build` · start: `npm start` | `npm run dev:dual` + `vite` |
+| Command | build: `npm ci --include=dev && npm run build` · start: `npm start` (see `render.yaml`; a bare `npm install` under `NODE_ENV=production` omits devDependencies and fails the build with `TS2688: Cannot find type definition file for 'vite/client'`) | `npm run dev:dual` + `vite` |
 | Listener | `0.0.0.0:$PORT` (one) | `127.0.0.1:3004` + `:3003` |
 | Transport | `STATE_TRANSPORT=embedded` | external (default) |
 | Persistence | `PERSISTENCE_BACKEND=postgres` | `file` (default) |

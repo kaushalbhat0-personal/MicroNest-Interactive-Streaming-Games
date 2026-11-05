@@ -14,3 +14,4 @@ data/authority.lock
 .playwright-mcp/
 # Generated Python bytecode.
 tools/__pycache__/
+.neon

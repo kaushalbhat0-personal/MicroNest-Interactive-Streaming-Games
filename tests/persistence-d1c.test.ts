@@ -191,6 +191,16 @@ describe("D1-C persistence config (explicit selection, no silent fallback)", () 
       expect(String(opts.options)).toContain("statement_timeout=5000");
     } else throw new Error("expected postgres config");
   });
+  it("pooled (-pooler) hosts skip the options startup parameter (PgBouncer-safe client timeout)", () => {
+    const r = resolvePersistenceConfig({ PERSISTENCE_BACKEND: "postgres", DATABASE_URL: "postgresql://u:p@ep-xyz-123-pooler.c-2.aws.neon.tech/tidebound?sslmode=require" });
+    if (r.ok && r.config.backend === "postgres") {
+      expect(r.config.isPooled).toBe(true);
+      const opts = poolOptionsFor(r.config as never) as Record<string, unknown>;
+      expect(opts).not.toHaveProperty("options");
+      expect(opts.query_timeout).toBe(5_000);
+      expect(opts.max).toBe(3);
+    } else throw new Error("expected postgres config");
+  });
   it("redaction never includes user, password, or params", () => {
     const red = redactDatabaseUrl("postgresql://user:s3cret@db.example.com:5432/tidebound?sslmode=require");
     expect(red).toContain("db.example.com");

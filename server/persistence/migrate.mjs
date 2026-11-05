@@ -19,8 +19,34 @@ function migrationsDir() {
   return join(dirname(fileURLToPath(import.meta.url)), "migrations");
 }
 
+// Candidate directories for migration SQL, first hit wins. The source
+// layout keeps SQL next to this module (server/persistence/migrations);
+// the production bundle (dist-server/authority-server.mjs, built by
+// esbuild) inlines this module, so `npm run build:server` also copies the
+// SQL to dist-server/migrations. The cwd-relative fallback covers running
+// the bundle from the repo root.
+function migrationsCandidates() {
+  const here = migrationsDir();
+  const cands = [here];
+  try {
+    const cwdBased = join(process.cwd(), "server", "persistence", "migrations");
+    if (cwdBased !== here) cands.push(cwdBased);
+  } catch {
+    /* cwd unavailable — rely on the adjacent dir */
+  }
+  return cands;
+}
+
 export async function loadMigrationSql(name) {
-  return readFile(join(migrationsDir(), name), "utf8");
+  let lastError = null;
+  for (const dir of migrationsCandidates()) {
+    try {
+      return await readFile(join(dir, name), "utf8");
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError ?? new Error("migration-unreadable");
 }
 
 /** Current applied version, or null when no migration has run yet. */

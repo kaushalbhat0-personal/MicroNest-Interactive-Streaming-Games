@@ -386,7 +386,9 @@ describe("UX-004 architecture audit", () => {
     expect((MAIN_TS.match(/new Phaser\.Game\(\{/g) ?? []).length).toBe(1);
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
     // D1-C authorizes exactly one server-only dependency: pg (see activity audit).
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
+    // Plus the two Neon IaC entries (@neon/config for neon.ts, @neon/env for
+    // branch env injection) — infrastructure, not app runtime.
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["@neon/config", "@neon/env", "pg", "phaser"]);
   });
 
   it("original handler payloads preserved (meaning unchanged)", () => {

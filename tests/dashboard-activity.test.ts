@@ -432,8 +432,11 @@ describe("UX-005 architecture audit", () => {
     const pkg = JSON.parse(PACKAGE_JSON) as { dependencies?: Record<string, string> };
     // D1-C authorizes exactly one server-only dependency: pg (node-postgres,
     // pooled TLS driver for Neon; lazily imported server-side, never in the
-    // browser bundle). No other runtime dependencies are permitted.
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
+    // browser bundle). The two @neon/* entries are Neon infrastructure-as-code
+    // (neon.ts policy + env pull), not app runtime: @neon/config is only
+    // imported by neon.ts and @neon/env only injects branch env vars.
+    // No other runtime dependencies are permitted.
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["@neon/config", "@neon/env", "pg", "phaser"]);
   });
 
   it("Overview previews and Control Room wiring remain intact", () => {

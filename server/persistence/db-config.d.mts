@@ -18,6 +18,7 @@ export interface PostgresPersistenceConfig {
   databaseUrl: string;
   host: string;
   requireTls: boolean;
+  isPooled: boolean;
   pool: { max: number; min: number; idleTimeoutMillis: number; connectionTimeoutMillis: number };
   statementTimeoutMs: number;
 }

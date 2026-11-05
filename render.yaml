@@ -1,0 +1,21 @@
+# Render blueprint for the Tidebound authority (single web service).
+#
+# The authority's TypeScript build needs devDependencies (vite provides the
+# `vite/client` types required by tsconfig.json; typescript/vite/esbuild run
+# the build). Render sets NODE_ENV=production, under which a bare
+# `npm install` OMITS devDependencies and the build fails with
+# `TS2688: Cannot find type definition file for 'vite/client'`.
+# `npm ci --include=dev` installs devDependencies deterministically from the
+# lockfile even when NODE_ENV=production. Do NOT move vite/typescript into
+# `dependencies` to work around this.
+#
+# Secrets and operator values (DATABASE_URL, AUTHORITY_TOKEN,
+# GOOGLE_* / DASHBOARD_URL, CORS_ORIGINS, STATE_TRANSPORT) are configured in
+# the Render dashboard, never in this file. See docs/render-hosting.md.
+services:
+  - type: web
+    name: tidebound-api
+    runtime: node
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/readyz

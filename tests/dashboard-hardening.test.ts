@@ -138,7 +138,9 @@ describe("UX-007A render performance", () => {
       dependencies?: Record<string, string>;
     };
     // D1-C authorizes exactly one server-only dependency: pg (see activity audit).
-    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["pg", "phaser"]);
+    // Plus the two Neon IaC entries (@neon/config for neon.ts, @neon/env for
+    // branch env injection) — infrastructure, not app runtime.
+    expect(Object.keys(pkg.dependencies ?? {}).sort()).toEqual(["@neon/config", "@neon/env", "pg", "phaser"]);
   });
 });
 
