@@ -15,6 +15,15 @@ import {
   shouldSwitchAnim,
   type KeeperPose,
 } from "./keeperAnims";
+import {
+  VESSEL_ATLAS_KEY,
+  VESSEL_IDLE_ANIM,
+  VESSEL_IDLE_FRAME_RATE,
+  VESSEL_IDLE_FRAMES,
+  VESSEL_IDLE_REPEAT,
+  VESSEL_JSON_URL,
+  VESSEL_PNG_URL,
+} from "./vesselAnims";
 
 const W = 1920;
 const H = 1080;
@@ -81,6 +90,7 @@ export class GameScene extends Phaser.Scene {
 
   private vessel!: Phaser.GameObjects.Container;
   private vesselBody!: Phaser.GameObjects.Rectangle;
+  private vesselSprite: Phaser.GameObjects.Sprite | null = null;
   private vesselLights: Phaser.GameObjects.Arc[] = [];
   private vesselBar!: Phaser.GameObjects.Graphics;
   private vesselHpText!: Phaser.GameObjects.Text;
@@ -137,7 +147,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Burst/effect anchors follow the active composition (never clipped). */
   private hitAnchor(): { x: number; y: number } {
-    return this.isPortrait ? { x: 680, y: 680 } : { x: 1420, y: 740 };
+    return this.isPortrait ? { x: 820, y: 680 } : { x: 1420, y: 740 };
   }
 
   private healAnchor(): { x: number; y: number } {
@@ -161,6 +171,7 @@ export class GameScene extends Phaser.Scene {
     // P1D: keeper atlas. A missing file only fails this load; create()
     // keeps primitives whenever the texture is absent (never blank).
     this.load.atlas(KEEPER_ATLAS_KEY, KEEPER_PNG_URL, KEEPER_JSON_URL);
+    this.load.atlas(VESSEL_ATLAS_KEY, VESSEL_PNG_URL, VESSEL_JSON_URL);
   }
 
   create(): void {
@@ -270,7 +281,7 @@ export class GameScene extends Phaser.Scene {
     const keepBarY = this.isPortrait ? 640 : 592;
     const heroBarX = this.isPortrait ? 448 : 628;
     const heroBarY = this.isPortrait ? 1026 : 926;
-    const vesselBarX = this.isPortrait ? 580 : 1280;
+    const vesselBarX = this.isPortrait ? 720 : 1280;
     this.drawBar(this.keepBar, keepBarX, keepBarY, 190, w.keepHp, w.maxKeepHp, 0x90be6d);
     this.keepHpText.setText(`Keep ${w.keepHp}/${w.maxKeepHp}`);
     this.keepLabel.setText(cinder === "lost" ? "CINDERHOLM · FALLEN" : "CINDERHOLM");
@@ -360,7 +371,15 @@ export class GameScene extends Phaser.Scene {
     if (oneShot) this.playKeeper(oneShot);
     if (r.visual.shake) this.cameras.main.shake(180, 0.006);
     if (r.visual.hitEnemy) {
-      this.flash(this.vesselBody, 0xffffff);
+      if (this.vesselSprite?.visible) {
+        const sprite = this.vesselSprite;
+        sprite.setTintFill(0xffffff);
+        this.time.delayedCall(120, () => {
+          if (sprite.active) sprite.clearTint();
+        });
+      } else {
+        this.flash(this.vesselBody, 0xffffff);
+      }
       this.tweens.add({ targets: this.vessel, x: "+=18", duration: 70, yoyo: true, repeat: 3 });
       const p = this.hitAnchor();
       this.burst(p.x, p.y, 0xffd166);
@@ -804,7 +823,7 @@ export class GameScene extends Phaser.Scene {
 
   private buildVessel(): void {
     const P = this.isPortrait;
-    const home = P ? { x: 680, y: 720 } : { x: 1420, y: 780 };
+    const home = P ? { x: 820, y: 720 } : { x: 1420, y: 780 };
     // Gloam Vessel: siege hull offshore, gloam-lit.
     this.vessel = this.add.container(home.x, home.y).setDepth(4);
     this.vesselBody = this.add.rectangle(0, 0, 210, 84, 0x9d0208);
@@ -821,8 +840,11 @@ export class GameScene extends Phaser.Scene {
       this.vessel.add(l);
       this.vesselLights.push(l);
     }
-    if (!this.reducedMotion) {
+    const spriteReady = this.setupVesselSprite();
+    if (!this.reducedMotion && !spriteReady) {
       this.tweens.add({ targets: this.vessel, y: home.y + 12, duration: 2600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    if (!this.reducedMotion && !spriteReady) {
       for (let i = 0; i < this.vesselLights.length; i++) {
         this.tweens.add({ targets: this.vesselLights[i], alpha: 0.45, duration: 700 + i * 260, yoyo: true, repeat: -1 });
       }
@@ -830,18 +852,62 @@ export class GameScene extends Phaser.Scene {
     // Hull wake.
     const wake = this.add.graphics().setDepth(3);
     wake.lineStyle(2, 0x90e0ef, 0.3);
-    if (this.isPortrait) wake.lineBetween(550, 770, 810, 770);
+    if (this.isPortrait) wake.lineBetween(690, 770, 950, 770);
     else wake.lineBetween(1290, 830, 1550, 830);
 
     this.vesselBar = this.add.graphics().setDepth(7);
     this.vesselLabel = this.add
-      .text(this.isPortrait ? 680 : 1420, this.isPortrait ? 500 : 630, "", { fontSize: this.isPortrait ? "32px" : "26px", color: "#ff8fa3", fontStyle: "bold" })
+      .text(this.isPortrait ? 820 : 1420, this.isPortrait ? 500 : 630, "", { fontSize: this.isPortrait ? "32px" : "26px", color: "#ff8fa3", fontStyle: "bold" })
       .setOrigin(0.5, 0)
       .setDepth(7);
     this.vesselHpText = this.add
-      .text(this.isPortrait ? 680 : 1420, this.isPortrait ? 534 : 660, "", { fontSize: this.isPortrait ? "28px" : "22px", color: "#b9b3c7" })
+      .text(this.isPortrait ? 820 : 1420, this.isPortrait ? 534 : 660, "", { fontSize: this.isPortrait ? "28px" : "22px", color: "#b9b3c7" })
       .setOrigin(0.5, 0)
       .setDepth(7);
+  }
+
+  /** Attach the atlas sprite only when every required frame is available. */
+  private setupVesselSprite(): boolean {
+    if (!this.textures.exists(VESSEL_ATLAS_KEY)) return false;
+    const texture = this.textures.get(VESSEL_ATLAS_KEY);
+    if (!VESSEL_IDLE_FRAMES.every((frame) => texture.has(frame))) return false;
+    let sprite: Phaser.GameObjects.Sprite | null = null;
+    try {
+      if (!this.anims.exists(VESSEL_IDLE_ANIM)) {
+        this.anims.create({
+          key: VESSEL_IDLE_ANIM,
+          frames: VESSEL_IDLE_FRAMES.map((frame) => ({ key: VESSEL_ATLAS_KEY, frame })),
+          frameRate: VESSEL_IDLE_FRAME_RATE,
+          repeat: VESSEL_IDLE_REPEAT,
+        });
+      }
+      sprite = this.add.sprite(0, 0, VESSEL_ATLAS_KEY, VESSEL_IDLE_FRAMES[0]);
+      // The atlas cell is 512x288. 0.55 keeps the artwork near the
+      // primitive's ~270px horizontal footprint while retaining the
+      // source's approved lower-hull pivot.
+      sprite.setOrigin(0.5, 0.86).setScale(0.55);
+      this.vessel.add(sprite);
+      if (this.reducedMotion) {
+        sprite.stop();
+        sprite.setTexture(VESSEL_ATLAS_KEY, VESSEL_IDLE_FRAMES[0]);
+      } else {
+        sprite.play(VESSEL_IDLE_ANIM);
+      }
+      this.vesselSprite = sprite;
+      for (const child of this.vessel.list) {
+        if (child !== sprite) {
+          (child as Phaser.GameObjects.GameObject & { setVisible: (visible: boolean) => unknown }).setVisible(false);
+        }
+      }
+      return true;
+    } catch {
+      sprite?.destroy();
+      this.vesselSprite = null;
+      for (const child of this.vessel.list) {
+        (child as Phaser.GameObjects.GameObject & { setVisible: (visible: boolean) => unknown }).setVisible(true);
+      }
+      return false;
+    }
   }
 
   private buildChapelBrazier(): void {

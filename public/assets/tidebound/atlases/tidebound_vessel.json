@@ -1,0 +1,94 @@
+{
+  "frames": {
+    "vessel_idle_side_00": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "sourceSize": {
+        "w": 512,
+        "h": 288
+      }
+    },
+    "vessel_idle_side_01": {
+      "frame": {
+        "x": 512,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "sourceSize": {
+        "w": 512,
+        "h": 288
+      }
+    },
+    "vessel_idle_side_02": {
+      "frame": {
+        "x": 1024,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "sourceSize": {
+        "w": 512,
+        "h": 288
+      }
+    },
+    "vessel_idle_side_03": {
+      "frame": {
+        "x": 1536,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 512,
+        "h": 288
+      },
+      "sourceSize": {
+        "w": 512,
+        "h": 288
+      }
+    }
+  },
+  "meta": {
+    "app": "P2B-9B proof",
+    "version": "1.0",
+    "image": "tidebound_vessel.png",
+    "size": {
+      "w": 2048,
+      "h": 288
+    },
+    "scale": "1"
+  }
+}
