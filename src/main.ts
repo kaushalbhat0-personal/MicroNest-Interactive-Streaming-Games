@@ -4,6 +4,7 @@ import { GameScene } from "./phaser/GameScene";
 import { clearStoredToken, getStoredToken, ServerRuntime, setStoredToken } from "./dashboard/server-runtime";
 import { applySnapshotToScene } from "./renderer/apply-snapshot";
 import { connectRendererTransport } from "./renderer/transport-client";
+import { resolveStateTransportUrls } from "./renderer/state-transport-urls";
 import type { SnapshotV1 } from "./shared/snapshot";
 import "./presentation/tidebound.css";
 
@@ -184,7 +185,7 @@ async function bootTick(): Promise<void> {
   if (!wired) {
     wired = true;
     wirePanel(runtime, refreshPanel);
-    connectRendererTransport({ onSnapshot: onPreviewSnapshot, onState: () => undefined }, { format: "landscape" });
+    connectRendererTransport({ onSnapshot: onPreviewSnapshot, onState: () => undefined }, { format: "landscape", ...resolveStateTransportUrls() });
     setInterval(refreshPanel, 1000);
     setInterval(() => void syncDualBlock(), 2000);
     refreshPanel();

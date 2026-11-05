@@ -30,6 +30,7 @@ import { GameScene } from "../phaser/GameScene";
 import type { SnapshotV1 } from "../shared/snapshot";
 import type { RendererConnState } from "../shared/transport-core";
 import { connectRendererTransport } from "./transport-client";
+import { resolveStateTransportUrls } from "./state-transport-urls";
 import {
   applySnapshotToScene,
   rendererDims,
@@ -112,7 +113,7 @@ export function bootRenderer(): RendererDebug {
     paintStatus(state, detail, lastSnap ? lastSnap.worldRev : null, transport.getLastSeq());
   }
 
-  const transport = connectRendererTransport({ onSnapshot, onState }, { format });
+  const transport = connectRendererTransport({ onSnapshot, onState }, { format, ...resolveStateTransportUrls() });
 
   // Synchronous first paint note: with no authority yet the page shows the
   // waiting state over an empty stage (never a local simulation).

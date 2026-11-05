@@ -328,13 +328,21 @@ describe("D1-D listener, production, and bundle boundaries (unit)", () => {
       "../src/renderer/transport-client.ts",
       "../src/renderer/renderer.ts",
       "../src/renderer/apply-snapshot.ts",
+      "../src/renderer/state-transport-urls.ts",
     ];
     for (const f of clientFiles) {
       const src = await readFile(join(__dirname, f), "utf8").catch(() => "");
       expect(src).not.toMatch(/from ["']pg["']/);
       expect(src).not.toContain("DATABASE_URL");
       expect(src).not.toContain("process.env");
-      expect(src).not.toMatch(/import\.meta\.env/);
+      // Exactly one module may touch the client env: state-transport-urls.ts
+      // reads only the public VITE_STATE_BASE_URL backend origin (no
+      // secrets; see t4f-c1-security for the secret-name guard).
+      if (f.endsWith("state-transport-urls.ts")) {
+        expect(src).toContain("VITE_STATE_BASE_URL");
+      } else {
+        expect(src).not.toMatch(/import\.meta\.env/);
+      }
     }
     const vite = await readFile(join(__dirname, "..", "vite.config.ts"), "utf8");
     expect(vite).toContain("server/**");

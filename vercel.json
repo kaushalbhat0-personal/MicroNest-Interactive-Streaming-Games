@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://tidebound-api.example.com/api/:path*"
+      "destination": "https://tidebound-api.onrender.com/api/:path*"
     }
   ]
 }

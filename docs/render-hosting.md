@@ -44,9 +44,15 @@ is dev/build only.
 
 ## 2. Configuration prepared but NOT externally verified
 
-- `vercel.json` rewrite `/api/:path*` → Render `/api/:path*` (placeholder
-  domain). Same-origin browser calls, no frontend change, secrets stay in
-  the Authorization header (forwarded by the rewrite).
+- `vercel.json` rewrite `/api/:path*` → Render `/api/:path*`
+  (`https://tidebound-api.onrender.com`). Same-origin browser calls, no
+  frontend change, secrets stay in the Authorization header (forwarded by
+  the rewrite). Method, body, query string, and error statuses pass through.
+- `CORS_ORIGINS` (comma-separated explicit origins — must contain the exact
+  Vercel production origin, e.g. `https://<app>.vercel.app`, plus any custom
+  domain). Production boots fail without it. Required even though mutations
+  go through the rewrite: the proxied `Origin` header is still checked by
+  the authority, and direct state transport (below) needs it too.
 - `CORS_ORIGINS` (comma-separated explicit origins, e.g.
   `https://tidebound-dash.example.com`). Production boots fail without it.
 - Render env names: `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT` (injected),
@@ -55,7 +61,9 @@ is dev/build only.
   `STATE_TRANSPORT=embedded`, `CORS_ORIGINS`, `GOOGLE_CLIENT_ID`,
   `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`,
   `GOOGLE_TOKEN_ENCRYPTION_KEY`, `DASHBOARD_URL`. Which service needs each:
-  ALL on the single Render service; Vercel needs none (static + rewrite).
+  ALL on the single Render service; Vercel needs no secrets (static +
+  rewrite), optionally `VITE_STATE_BASE_URL` (public backend origin, see
+  "Vercel frontend" below).
 - Neon pooled TLS: `pg` pool max 3, statement timeout 5 s, full-chain TLS
   (`rejectUnauthorized:true`) for non-loopback hosts.
 - Migration: `ensureMigrated` runs `001_init.sql` at boot (idempotent);
@@ -68,11 +76,42 @@ is dev/build only.
   polling wakes a sleeping service; DB outage can never fresh-genesis
   (fail boot / degraded-continue per `server/persistence/storage.mjs`).
 - OAuth redirect: Google Cloud console must list the Render
-  `/api/youtube/oauth-callback` URL (see placeholder above).
+  `/api/youtube/oauth-callback` URL (`GOOGLE_REDIRECT_URI`).
 
-## 3. Remaining cloud-only verification (D1-E+, NOT this phase)
+## 3. Vercel frontend (D1-F2)
 
-Neon provisioning, Render staging deploy + health check, Vercel rewrite
+Static Vite hosting; the browser is a control client + read-only renderer.
+Dashboard mutations stay on same-origin relative `/api/*` through the
+`vercel.json` rewrite. Snapshot/SSE state transport may bypass the rewrite:
+
+- Vercel settings — framework: Vite; build: `tsc --noEmit && vite build`
+  (server bundle intentionally excluded — Render-only); output: `dist`;
+  Node: 22.x (`engines`); install: default (`npm install`, devDeps
+  included — do NOT set `NODE_ENV=production` in Vercel env or the build
+  loses devDependencies exactly like the Render TS2688 failure).
+- Optional `VITE_STATE_BASE_URL=https://tidebound-api.onrender.com`:
+  snapshot + SSE resolve directly against Render, avoiding the external
+  rewrite's ~120 s proxy lifetime on long-lived event streams. Unset →
+  historical relative `/api/state/*` (local dev, rewrite deployments).
+  Public origin only — never tokens, secrets, or database URLs (boundary
+  tests enforce this). Trailing slashes normalized; invalid values fall
+  back to relative. Wired through both entry paths (`src/main.ts` preview,
+  `src/renderer/renderer.ts` overlays) via the existing
+  `snapshotUrl`/`streamUrl` overrides; reconnect cursors, `since`/`format`
+  params, backoff, and snapshot recovery unchanged.
+- Render `CORS_ORIGINS` MUST contain the exact Vercel production origin
+  (and any custom domain) — direct EventSource responses carry no
+  credentials but browsers still enforce ACAO; unknown origins get 403 and
+  overlays/snapshots fail closed. `DASHBOARD_URL` must be the Vercel URL
+  (post-OAuth return link). `GOOGLE_REDIRECT_URI` stays the Render
+  `/api/youtube/oauth-callback` URL (also registered in Google Cloud).
+- Render Free spin-down: compatible as-is — EventSource reconnects with
+  `since` replay/`recovery` refetch, dashboard polls (1 s panel / 2 s
+  transport) re-wake the service. No keepalive, no extra polling.
+
+## 4. Remaining cloud-only verification (D1-E+, NOT this phase)
+
+Neon provisioning, Render staging deploy + health check, Vercel deployment
 against the real Render URL, Google OAuth consent/redirect approval, live
 broadcast discovery/polling/announcements, OBS rendering of live events,
 Free-tier sleep/wake measurement, CU-hour/egress budgeting. Do NOT assume

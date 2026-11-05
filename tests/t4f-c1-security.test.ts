@@ -115,7 +115,7 @@ describe("T4F-C1 — transport security posture (static audits)", () => {
     const CLIENT_FILES = [
       ...["main.ts", "overlay.ts"].map((f) => join(ROOT, "src", f)),
       ...["server-runtime.ts"].map((f) => join(ROOT, "src", "dashboard", f)),
-      ...["transport-client.ts", "renderer.ts", "apply-snapshot.ts"].map((f) =>
+      ...["transport-client.ts", "renderer.ts", "apply-snapshot.ts", "state-transport-urls.ts"].map((f) =>
         join(ROOT, "src", "renderer", f),
       ),
     ];
@@ -129,9 +129,26 @@ describe("T4F-C1 — transport security posture (static audits)", () => {
       expect(src).not.toContain("process.env");
       expect(src).not.toContain("/api/state/publish");
     }
-    // No Vite client env carries secrets (VITE_* vars are bundled).
+    // No Vite client env carries secrets (VITE_* vars are bundled). Exactly
+    // one module — src/renderer/state-transport-urls.ts — may read exactly
+    // one public value, VITE_STATE_BASE_URL (a backend origin, never a
+    // credential), so state transport can bypass the Vercel rewrite's SSE
+    // lifetime limit. Everything else stays on a blanket ban.
     for (const file of CLIENT_FILES) {
-      expect(readFileSync(file, "utf8")).not.toMatch(/import\.meta\.env/);
+      const src = readFileSync(file, "utf8");
+      if (file.endsWith(join("renderer", "state-transport-urls.ts"))) {
+        expect(src).toContain("VITE_STATE_BASE_URL");
+      } else {
+        expect(src).not.toMatch(/import\.meta\.env/);
+      }
+    }
+    // And nowhere in browser source may a secret-shaped VITE_* name appear.
+    const SRC_FILES = [
+      ...CLIENT_FILES,
+      ...["app.ts", "main.ts", "overlay.ts"].map((f) => join(ROOT, "src", f)),
+    ];
+    for (const file of SRC_FILES) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/VITE_[A-Z_]*(TOKEN|SECRET|KEY|DATABASE|AUTHORITY|GOOGLE|BEARER)/);
     }
   });
 
