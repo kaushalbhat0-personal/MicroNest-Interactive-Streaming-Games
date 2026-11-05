@@ -55,7 +55,19 @@ export class GameScene extends Phaser.Scene {
   // (dashboard header/strip, overlay HUD), so nothing collides with them.
   private waves!: Phaser.GameObjects.Graphics;
   private wavePhase = 0;
+  private waveDrawAccumulator = 0;
   private chop = 0.5;
+  // W1 living environment: procedural drift layers (runtime canvas
+  // textures, no new art assets). Created once in create(); never in
+  // syncWorld/playResult, so state sync cannot duplicate them.
+  private driftFar!: Phaser.GameObjects.TileSprite;
+  private driftNear!: Phaser.GameObjects.TileSprite;
+  private shimmer!: Phaser.GameObjects.Graphics;
+  private mistBanks: Phaser.GameObjects.Ellipse[] = [];
+  private beamSweep!: Phaser.GameObjects.Container;
+  private beamCore!: Phaser.GameObjects.Graphics;
+  private lanternFlicker!: Phaser.GameObjects.Arc;
+  private foamCaps: Phaser.GameObjects.Arc[] = [];
 
   private skyTint!: Phaser.GameObjects.Rectangle;
   private moon!: Phaser.GameObjects.Container;
@@ -64,7 +76,7 @@ export class GameScene extends Phaser.Scene {
 
   private lampGlow!: Phaser.GameObjects.Arc;
   private lampCore!: Phaser.GameObjects.Arc;
-  private beam!: Phaser.GameObjects.Graphics;
+  private beam!: Phaser.GameObjects.Graphics | Phaser.GameObjects.Image;
   private keepBar!: Phaser.GameObjects.Graphics;
   private keepHpText!: Phaser.GameObjects.Text;
   private keepLabel!: Phaser.GameObjects.Text;
@@ -199,6 +211,7 @@ export class GameScene extends Phaser.Scene {
 
     this.buildSky();
     this.buildSea();
+    this.buildSeaDrift();
     this.buildCinderholm();
     this.buildSkiff();
     this.buildReef();
@@ -206,19 +219,20 @@ export class GameScene extends Phaser.Scene {
     this.buildChapelBrazier();
     this.buildEyebrow();
     this.buildStaticMarkers();
+    this.buildMist();
 
     // Ambient sea spray (behind entities).
     if (this.textures.exists("px") && !this.reducedMotion) {
       const spray = this.add.particles(0, 0, "px", {
-        x: { min: 0, max: this.WW },
-        y: { min: this.HZ + 40, max: this.WH - 40 },
-        lifespan: 3800,
-        speedY: { min: -46, max: -16 },
-        speedX: { min: -14, max: 14 },
-        scale: { min: 0.15, max: 0.5 },
-        alpha: { min: 0.06, max: 0.32 },
+        x: { min: 0, max: this.isPortrait ? 440 : 680 },
+        y: { min: this.HZ + 35, max: Math.min(this.HZ + 340, this.WH - 60) },
+        lifespan: 2600,
+        speedY: { min: -32, max: -10 },
+        speedX: { min: -9, max: 10 },
+        scale: { min: 0.12, max: 0.32 },
+        alpha: { min: 0.04, max: 0.18 },
         tint: [0x90e0ef, 0xb9b3c7, 0x43aa8b],
-        frequency: 260,
+        frequency: 850,
       });
       spray.setDepth(1);
     }
@@ -228,12 +242,16 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, delta: number): void {
     if (this.reducedMotion) return;
-    this.wavePhase += delta * 0.0011;
-    this.drawWaves();
-    for (let i = 0; i < this.clouds.length; i++) {
-      const c = this.clouds[i];
-      c.x += Math.sin(this.wavePhase * 0.24 + i * 2.1) * 0.12;
+    this.wavePhase += delta * 0.00072;
+    this.waveDrawAccumulator += delta;
+    if (this.waveDrawAccumulator >= 100) {
+      this.waveDrawAccumulator %= 100;
+      this.drawWaves();
     }
+    // TileSprite offsets are the only per-frame sea mutation; clouds, mist,
+    // beacon and light pulses are scene-owned Phaser tweens.
+    if (this.driftFar) this.driftFar.tilePositionX += delta * 0.0024;
+    if (this.driftNear) this.driftNear.tilePositionX -= delta * 0.0034;
   }
 
   // ---------- state sync (called by app after every pump/tick) ----------
@@ -259,9 +277,13 @@ export class GameScene extends Phaser.Scene {
     if (cinder === "lost") {
       this.lampCore.setFillStyle(0x4a4360, 1);
       this.lampGlow.setFillStyle(0x4a4360, 0.1).setVisible(true);
+      this.lanternFlicker.setFillStyle(0x4a4360, 0.12).setVisible(true);
       this.beam.setVisible(false);
+      this.beamCore.setVisible(false);
     } else {
       this.beam.setVisible(true);
+      this.beamCore.setVisible(true);
+      this.lanternFlicker.setFillStyle(0xfff3d6, 0.5).setVisible(true);
       if (cinder === "strained") {
         this.lampCore.setFillStyle(0xf4a261, 1);
         this.lampGlow.setFillStyle(0xf4a261, 0.22).setVisible(true);
@@ -345,6 +367,7 @@ export class GameScene extends Phaser.Scene {
         this.shieldBubble.setVisible(true);
         this.shieldText.setVisible(true);
         this.beam.setVisible(true);
+        this.beamCore.setVisible(true);
         this.beam.setAlpha(0.24);
       }
       if (r.visual.spawnElite || r.visual.spawnWave) {
@@ -468,10 +491,28 @@ export class GameScene extends Phaser.Scene {
           [1620, 300, 520, 110],
         ];
     for (const [x, y, cw, ch] of cloudDefs) {
-      const c = this.add.ellipse(x, y, cw, ch, 0x141021, 0.88).setDepth(1);
+      const c = this.add.ellipse(x, y, cw, ch, 0x141021, 0.38).setDepth(1);
       this.clouds.push(c);
       if (!this.reducedMotion) {
-        this.tweens.add({ targets: c, x: x + 46, duration: 9000 + x, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        this.tweens.add({ targets: c, x: x + 22, alpha: 0.44, duration: 32000 + x * 3, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      }
+    }
+    // W1: far cloud plane (fainter, slower) for two-plane parallax depth.
+    // Kept behind the lighthouse/entities; drift only, no gameplay meaning.
+    const farCloudDefs: Array<[number, number, number, number]> = P
+      ? [
+          [180, 120, 320, 60],
+          [820, 150, 360, 70],
+        ]
+      : [
+          [600, 90, 480, 80],
+          [1400, 130, 560, 90],
+        ];
+    for (const [x, y, cw, ch] of farCloudDefs) {
+      const c = this.add.ellipse(x, y, cw, ch, 0x1c1440, 0.26).setDepth(0);
+      this.clouds.push(c);
+      if (!this.reducedMotion) {
+        this.tweens.add({ targets: c, x: x + 34, alpha: 0.32, duration: 48000 + x * 3, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
     }
 
@@ -527,17 +568,153 @@ export class GameScene extends Phaser.Scene {
     const WW = this.WW;
     const HZ = this.HZ;
     g.clear();
-    for (let row = 0; row < 4; row++) {
-      const yBase = HZ + 70 + row * 90;
-      const amp = (5 + row * 4) * this.chop;
-      g.lineStyle(2, row === 0 ? 0x90e0ef : 0x3d5a80, row === 0 ? 0.5 : 0.32);
-      g.beginPath();
-      for (let x = 0; x <= WW; x += 30) {
-        const y = yBase + Math.sin(x * 0.008 + this.wavePhase * (1 + row * 0.22) + row * 1.7) * amp;
-        if (x === 0) g.moveTo(x, y);
-        else g.lineTo(x, y);
+    const rowCount = this.isPortrait ? 6 : 5;
+    const strokesPerRow = this.isPortrait ? 11 : 17;
+    const stepY = this.isPortrait ? 118 : 92;
+    for (let row = 0; row < rowCount; row++) {
+      const yBase = HZ + 36 + row * stepY;
+      const alpha = Math.max(0.045, 0.13 - row * 0.014);
+      const color = row % 3 === 0 ? 0x90e0ef : row % 3 === 1 ? 0xb9b3c7 : 0x68869a;
+      for (let stroke = 0; stroke < strokesPerRow; stroke++) {
+        const seed = row * 101 + stroke * 13 + (this.isPortrait ? 29 : 7);
+        const x0 = hash01(seed) * WW;
+        const length = (26 + hash01(seed + 2) * 84) * (this.isPortrait ? 0.78 : 1);
+        const amp = (1.2 + hash01(seed + 4) * 2.4) * this.chop;
+        const phase = this.wavePhase * (0.65 + row * 0.08) + seed * 0.17;
+        g.lineStyle(row % 4 === 0 ? 2 : 1.5, color, alpha);
+        g.beginPath();
+        for (let point = 0; point <= 4; point++) {
+          const x = x0 + (length * point) / 4;
+          if (x > WW) break;
+          const y = yBase + Math.sin(x * 0.018 + phase) * amp + Math.sin(point * 1.4 + phase) * 0.7;
+          if (point === 0) g.moveTo(x, y);
+          else g.lineTo(x, y);
+        }
+        g.strokePath();
       }
-      g.strokePath();
+    }
+  }
+
+  // ---------- W1 living environment (procedural, rights-clean) ----------
+
+  /** Runtime canvas strip textures (seamless by construction: wrapped dashes). */
+  private makeDriftTextures(): void {
+    if (!this.textures.exists("beaconsoft")) {
+      const t = this.textures.createCanvas("beaconsoft", 960, 256);
+      if (t) {
+        const ctx = t.getContext();
+        ctx.clearRect(0, 0, 960, 256);
+        ctx.save();
+        ctx.filter = "blur(18px)";
+        ctx.fillStyle = "rgba(255,209,102,0.82)";
+        ctx.beginPath();
+        ctx.moveTo(0, 108);
+        ctx.lineTo(960, 0);
+        ctx.lineTo(960, 256);
+        ctx.lineTo(0, 148);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        const distance = ctx.createLinearGradient(0, 128, 960, 128);
+        distance.addColorStop(0, "rgba(255,255,255,0.82)");
+        distance.addColorStop(0.24, "rgba(255,255,255,0.56)");
+        distance.addColorStop(0.72, "rgba(255,255,255,0.2)");
+        distance.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.globalCompositeOperation = "destination-in";
+        ctx.fillStyle = distance;
+        ctx.fillRect(0, 0, 960, 256);
+        ctx.globalCompositeOperation = "source-over";
+        t.refresh();
+      }
+    }
+    if (!this.textures.exists("foamstrip")) {
+      const t = this.textures.createCanvas("foamstrip", 256, 32);
+      if (t) {
+        const ctx = t.getContext();
+        ctx.clearRect(0, 0, 256, 32);
+        ctx.fillStyle = "rgba(244,239,228,0.85)";
+        // Wrapped dash row: period 64px divides 256 → seamless horizontal tile.
+        for (let x = 8; x < 256; x += 64) {
+          ctx.fillRect(x, 10, 34, 3);
+          ctx.fillRect(x + 40, 20, 20, 2);
+        }
+        t.refresh();
+      }
+    }
+    if (!this.textures.exists("swellband")) {
+      const t = this.textures.createCanvas("swellband", 256, 64);
+      if (t) {
+        const ctx = t.getContext();
+        ctx.clearRect(0, 0, 256, 64);
+        // Soft swell shading: vertical gradient block (x-invariant → seamless).
+        const grad = ctx.createLinearGradient(0, 0, 0, 64);
+        grad.addColorStop(0, "rgba(61,90,128,0)");
+        grad.addColorStop(0.5, "rgba(61,90,128,0.5)");
+        grad.addColorStop(1, "rgba(22,50,74,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 256, 64);
+        t.refresh();
+      }
+    }
+  }
+
+  /**
+   * Two opposing TileSprite drift layers over the sea (offset drift only).
+   * Static under reduced motion. Never gameplay state.
+   */
+  private buildSeaDrift(): void {
+    this.makeDriftTextures();
+    const WW = this.WW;
+    const WH = this.WH;
+    const HZ = this.HZ;
+    const seaH = WH - HZ;
+    if (this.textures.exists("swellband")) {
+      this.driftFar = this.add.tileSprite(0, HZ + seaH * 0.25, WW, 64, "swellband").setOrigin(0, 0.5).setDepth(2).setAlpha(0.28);
+    }
+    if (this.textures.exists("foamstrip")) {
+      this.driftNear = this.add.tileSprite(0, HZ + seaH * 0.62, WW, 32, "foamstrip").setOrigin(0, 0.5).setDepth(2).setAlpha(0.16);
+    }
+    // Moon-road shimmer: short broken gold dashes under the moon column.
+    this.shimmer = this.add.graphics().setDepth(2);
+    const mx = this.isPortrait ? 580 : 1560;
+    this.shimmer.fillStyle(0xffd166, 1);
+    for (let i = 0; i < 6; i++) {
+      const y = HZ + 40 + i * 52;
+      const wob = ((i * 37) % 40) - 20;
+      this.shimmer.fillRect(mx - 46 + wob, y, 92 - (i % 3) * 18, 3);
+    }
+    this.shimmer.setAlpha(0.1);
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.shimmer, alpha: 0.17, duration: 7200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+  }
+
+  /**
+   * Low coastal mist banks + horizon haze (large soft ellipses, slow drift).
+   * Depth 2–3, always behind entities (depth 4+). Static under reduced motion.
+   */
+  private buildMist(): void {
+    const HZ = this.HZ;
+    const P = this.isPortrait;
+    const banks: Array<[number, number, number, number, number]> = P
+      ? [
+          [260, HZ + 120, 520, 90, 0.07],
+          [800, HZ + 260, 560, 100, 0.06],
+          [540, HZ - 30, 700, 70, 0.08],
+        ]
+      : [
+          [500, HZ + 130, 700, 100, 0.07],
+          [1300, HZ + 260, 800, 110, 0.06],
+          [960, HZ - 30, 1100, 80, 0.08],
+        ];
+    this.mistBanks = [];
+    for (let i = 0; i < banks.length; i++) {
+      const [x, y, w, h, a] = banks[i];
+      const m = this.add.ellipse(x, y, w, h, 0xb9b3c7, a * 0.7).setDepth(2 + (i % 2));
+      this.mistBanks.push(m);
+      if (!this.reducedMotion) {
+        this.tweens.add({ targets: m, x: x + (i % 2 === 0 ? 38 : -38), alpha: a * 0.85, duration: 32000 + i * 7000, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      }
     }
   }
 
@@ -598,24 +775,74 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Light beam (alpha pulsed in sync/effects; static under reduced motion).
-    // Landscape sweeps to x1150; portrait shortens inward to x~800 (in-frame).
+    // The lamp-relative pivot keeps the subtle sweep attached to the tower.
     const lampX = P ? 540 : 300;
     const lampY = P ? 252 : 392;
-    this.beam = this.add.graphics().setDepth(2);
-    this.beam.fillStyle(0xffd166, 1);
-    if (P) {
-      this.beam.fillTriangle(540, 240, 540, 264, 800, 200);
-      this.beam.fillTriangle(540, 240, 540, 264, 800, 320);
+    if (this.textures.exists("beaconsoft")) {
+      this.beam = this.add.image(P ? 0 : 50, 0, "beaconsoft").setOrigin(0, 0.5).setScale(P ? 0.56 : 0.9).setAlpha(0.13);
     } else {
-      this.beam.fillTriangle(350, 380, 350, 404, 1150, 300);
-      this.beam.fillTriangle(350, 380, 350, 404, 1150, 484);
+      const wedge = this.add.graphics();
+      wedge.fillStyle(0xffd166, 1);
+      if (P) {
+        wedge.fillTriangle(0, -12, 0, 12, 520, -90);
+        wedge.fillTriangle(0, -12, 0, 12, 520, 90);
+      } else {
+        wedge.fillTriangle(50, -12, 50, 12, 900, -100);
+        wedge.fillTriangle(50, -12, 50, 12, 900, 100);
+      }
+      this.beam = wedge.setAlpha(0.13);
     }
-    this.beam.setAlpha(0.13);
+    // Beam core: narrower brighter strip over the soft cone.
+    this.beamCore = this.add.graphics();
+    this.beamCore.fillStyle(0xfff3d6, 1);
+    if (P) {
+      this.beamCore.fillTriangle(0, -5, 0, 5, 260, -38);
+      this.beamCore.fillTriangle(0, -5, 0, 5, 260, 44);
+    } else {
+      this.beamCore.fillTriangle(50, -5, 50, 5, 850, -60);
+      this.beamCore.fillTriangle(50, -5, 50, 5, 850, 60);
+    }
+    this.beamCore.setAlpha(0.055);
+    this.beamSweep = this.add.container(lampX, lampY, [this.beam, this.beamCore]);
+    this.beamSweep.setDepth(2);
+    if (!this.reducedMotion) {
+      // Slow bounded sweep (subtle at 4 FPS capture; never full rotation).
+      this.tweens.add({ targets: this.beamSweep, angle: 2.2, duration: 20000, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.tweens.add({ targets: this.beamCore, alpha: 0.085, duration: 6800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
 
     this.lampGlow = this.add.circle(lampX, lampY, 46, 0xffd166, 0.28).setDepth(4);
     this.lampCore = this.add.circle(lampX, lampY, 15, 0xffd166, 1).setDepth(5);
     if (!this.reducedMotion) {
       this.tweens.add({ targets: this.lampGlow, scale: 1.25, alpha: 0.16, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    // W1: lantern-room flicker (warm glass breathing; lost state recolors
+    // the core via syncWorld, flicker follows the same lamp).
+    this.lanternFlicker = this.add.circle(lampX, lampY, 24, 0xfff3d6, 0.5).setDepth(4);
+    if (!this.reducedMotion) {
+      this.tweens.add({ targets: this.lanternFlicker, alpha: 0.22, scale: 1.18, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    }
+    // W1: shoreline foam caps at the island waterline (gentle pulse only).
+    this.foamCaps = [];
+    const foamSpots: Array<[number, number, number]> = P
+      ? [
+          [330, 648, 16],
+          [540, 668, 20],
+          [750, 648, 16],
+        ]
+      : [
+          [90, 852, 18],
+          [300, 872, 22],
+          [510, 852, 18],
+        ];
+    for (const [fx, fy, fr] of foamSpots) {
+      const cap = this.add.circle(fx, fy, fr, 0xf4efe4, 0.16).setDepth(3);
+      this.foamCaps.push(cap);
+    }
+    if (!this.reducedMotion) {
+      for (let i = 0; i < this.foamCaps.length; i++) {
+        this.tweens.add({ targets: this.foamCaps[i], alpha: 0.22, duration: 3600 + i * 650, scale: 1.06, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      }
     }
 
     const shieldPos = P ? { x: 540, y: 420 } : { x: 300, y: 560 };
@@ -666,7 +893,7 @@ export class GameScene extends Phaser.Scene {
     try {
       this.registerKeeperAnims();
       const sprite = this.add.sprite(0, this.keeperSpriteDY(), KEEPER_ATLAS_KEY, keeperFrame("idle", 0));
-      sprite.setOrigin(0.5, 1).setDepth(4);
+      sprite.setOrigin(0.5, 1).setScale(this.isPortrait ? 0.8 : 0.78).setDepth(4);
       this.hero.add(sprite);
       this.keeperSprite = sprite;
       for (const p of this.keeperPrimitives) p.setVisible(false);
@@ -770,9 +997,8 @@ export class GameScene extends Phaser.Scene {
     this.keeperPrimitives = [cloak, hood, helm, oar];
     this.keeperFlashPrimitive = cloak;
     this.setupKeeperSprite();
-    if (!this.reducedMotion) {
-      this.tweens.add({ targets: this.hero, y: skiff.y + 10, duration: 2200, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    }
+    // Keep the feet anchored to the skiff during idle; environmental water
+    // supplies motion without a character-only bob that reads as foot sliding.
     // Stern lantern (flares on heal).
     const lanternPos = P ? { x: 598, y: 860 } : { x: 778, y: 760 };
     const pole = this.add.rectangle(P ? 598 : 778, P ? 896 : 796, 6, 60, 0x6c757d).setDepth(4);
@@ -882,10 +1108,9 @@ export class GameScene extends Phaser.Scene {
         });
       }
       sprite = this.add.sprite(0, 0, VESSEL_ATLAS_KEY, VESSEL_IDLE_FRAMES[0]);
-      // The atlas cell is 512x288. 0.55 keeps the artwork near the
-      // primitive's ~270px horizontal footprint while retaining the
-      // source's approved lower-hull pivot.
-      sprite.setOrigin(0.5, 0.86).setScale(0.55);
+      // The approved lower-hull pivot stays fixed. W0.1's orientation-specific
+      // staging scales keep the vessel prominent in both compositions.
+      sprite.setOrigin(0.5, 0.86).setScale(this.isPortrait ? 0.76 : 0.9);
       this.vessel.add(sprite);
       if (this.reducedMotion) {
         sprite.stop();

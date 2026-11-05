@@ -24,7 +24,8 @@ export interface KeeperPoseDef {
 }
 
 export const KEEPER_POSES: Record<KeeperPose, KeeperPoseDef> = {
-  idle: { frames: 4, frameRate: 4, repeat: -1, oneShot: false },
+  // Four approved frames span a calm three-second idle breath cycle.
+  idle: { frames: 4, frameRate: 4 / 3, repeat: -1, oneShot: false },
   walk: { frames: 6, frameRate: 6, repeat: -1, oneShot: false },
   strike: { frames: 4, frameRate: 9, repeat: 0, oneShot: true },
   shield: { frames: 3, frameRate: 3, repeat: -1, oneShot: false },

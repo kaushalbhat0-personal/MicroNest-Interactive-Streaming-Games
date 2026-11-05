@@ -1,7 +1,7 @@
 /**
  * Keeper animation pacing (smoothness fix).
  * Locks per-pose frame rates and derived loop/one-shot durations so the
- * relaxed/subtle idle, readable walk, snappy strike, stable shield, calm
+ * three-second idle, readable walk, snappy strike, stable shield, calm
  * mend and readable interact pacing cannot regress to the old too-fast
  * values. Pure logic: no Phaser, no DOM.
  */
@@ -15,7 +15,7 @@ function durationMs(pose: keyof typeof KEEPER_POSES): number {
 
 describe("keeper animation pacing", () => {
   it("uses tuned per-pose frame rates (no global FPS)", () => {
-    expect(KEEPER_POSES.idle.frameRate).toBe(4);
+    expect(KEEPER_POSES.idle.frameRate).toBe(4 / 3);
     expect(KEEPER_POSES.walk.frameRate).toBe(6);
     expect(KEEPER_POSES.strike.frameRate).toBe(9);
     expect(KEEPER_POSES.shield.frameRate).toBe(3);
@@ -39,8 +39,8 @@ describe("keeper animation pacing", () => {
     // Strike stays the fastest one-shot (responsive, impactful).
     expect(durationMs("strike")).toBeLessThan(500);
     expect(durationMs("strike")).toBeLessThan(durationMs("mend"));
-    // Idle loop breathes (~1s), shield hold is the calmest loop.
-    expect(durationMs("idle")).toBeGreaterThanOrEqual(1000);
+    // Four idle drawings span a calm three-second atmospheric cycle.
+    expect(durationMs("idle")).toBeCloseTo(3000, 6);
     expect(durationMs("shield")).toBeGreaterThanOrEqual(1000);
     // Walk reads at a natural ~1s stride cycle.
     expect(durationMs("walk")).toBeGreaterThanOrEqual(900);

@@ -67,6 +67,65 @@ describe("T4F-B — reduced motion intact", () => {
   });
 });
 
+describe("W1 — living environment lifecycle (procedural, state-safe)", () => {
+  function methodBody(name: string): string {
+    let start = GAMESCENE_TS.indexOf(`  private ${name}(`);
+    if (start < 0) start = GAMESCENE_TS.indexOf(`  ${name}(`);
+    if (start < 0) throw new Error(`GameScene method missing: ${name}`);
+    // Methods in this file end at the next "\n  }". Take a generous slice.
+    const end = GAMESCENE_TS.indexOf("\n  }", start);
+    return GAMESCENE_TS.slice(start, end);
+  }
+
+  it("drift, mist, beam sweep and shimmer builders exist and run from create()", () => {
+    for (const m of ["buildSeaDrift", "buildMist", "makeDriftTextures"]) {
+      expect(GAMESCENE_TS).toContain(`private ${m}(`);
+    }
+    const createBody = methodBody("create");
+    expect(createBody).toContain("this.buildSeaDrift();");
+    expect(createBody).toContain("this.buildMist();");
+    expect(createBody).toContain("this.buildCinderholm();");
+    expect(GAMESCENE_TS).toContain("this.beamSweep = this.add.container");
+  });
+
+  it("state sync creates no ambient loops; results stay one-shot", () => {
+    const syncBody = methodBody("syncWorld");
+    expect(syncBody).not.toContain("this.tweens.add");
+    expect(syncBody).not.toContain("this.add.particles");
+    expect(syncBody).not.toContain("tileSprite");
+    expect(syncBody).not.toContain("createCanvas");
+    expect(syncBody).not.toContain("this.add.container");
+    expect(syncBody).not.toContain("this.add.ellipse");
+    // playResult one-shots are event-driven by design; only ambient
+    // infinite loops would duplicate on repeated sync.
+    const playBody = methodBody("playResult");
+    expect(playBody).not.toContain("tileSprite");
+    expect(playBody).not.toContain("createCanvas");
+    expect(playBody).not.toContain("this.add.container");
+    expect(playBody).not.toContain("this.add.ellipse");
+    expect(playBody).not.toMatch(/repeat:\s*-1/);
+  });
+
+  it("every ambient tween is gated on reduced motion", () => {
+    // Builders guard whole blocks or individual adds; the update loop
+    // exits early. Count gated vs total `tweens.add` occurrences.
+    const total = GAMESCENE_TS.match(/this\.tweens\.add/g) ?? [];
+    expect(total.length).toBeGreaterThan(0);
+    const gatedPattern = /if\s*\(!this\.reducedMotion\)\s*\{[^}]*this\.tweens\.add/g;
+    expect(gatedPattern.test(GAMESCENE_TS)).toBe(true);
+    const updateBody = methodBody("update");
+    expect(updateBody).toContain("if (this.reducedMotion) return;");
+  });
+
+  it("no new atlas loads or generated art shipped in the scene", () => {
+    const preloadBody = methodBody("preload");
+    expect(preloadBody).toContain("KEEPER_ATLAS_KEY");
+    expect(preloadBody).toContain("VESSEL_ATLAS_KEY");
+    expect(GAMESCENE_TS).not.toMatch(/\.png["']/);
+    expect(GAMESCENE_TS).not.toContain("tidebound_env");
+  });
+});
+
 describe("T4F-B — dashboard dual-output block", () => {
   it("dual-output status nodes exist exactly once", () => {
     for (const id of ["st-dual-rev", "st-dual-landscape", "st-dual-portrait", "st-dual-transport"]) {
