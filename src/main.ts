@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { renderPanelState, wirePanel } from "./app";
+import { initShell } from "./dashboard/shell";
 import { GameScene } from "./phaser/GameScene";
 import { clearStoredToken, getStoredToken, ServerRuntime, setStoredToken } from "./dashboard/server-runtime";
 import { applySnapshotToScene } from "./renderer/apply-snapshot";
@@ -194,6 +195,12 @@ async function bootTick(): Promise<void> {
 }
 
 wireAuthCard();
+// D2.2: hash navigation must work before any token exists — the Settings
+// section holds the token input itself, so gating initShell() on a stored
+// token dead-ends first-run operators on Overview. initShell() is idempotent
+// (wirePanel calls it again after auth); it only shows/hides static sections
+// and never performs control actions, so bearer gating is unchanged.
+initShell();
 void bootTick();
 setInterval(() => void bootTick(), 1000);
 game.events.once("ready", refreshPanel);

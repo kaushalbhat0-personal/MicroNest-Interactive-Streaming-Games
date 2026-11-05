@@ -358,3 +358,27 @@ describe("UX-002 update-safety audit", () => {
     expect(SHELL_TS).not.toMatch(/[^a-zA-Z]fetch\(/);
   });
 });
+
+describe("D2.2 first-run navigation (no token must not trap the operator)", () => {
+  it("main wires shell navigation unconditionally at boot, outside the token gate", () => {
+    // The Settings section holds the token input itself: if initShell() only
+    // ran after a stored token + successful refresh, a first-run operator
+    // could never reach Settings to paste one (hash changed, section hidden).
+    expect(MAIN_TS).toContain('import { initShell } from "./dashboard/shell"');
+    const authCardAt = MAIN_TS.indexOf("wireAuthCard();");
+    const shellAt = MAIN_TS.indexOf("\ninitShell();");
+    const bootAt = MAIN_TS.indexOf("void bootTick();");
+    expect(authCardAt).toBeGreaterThanOrEqual(0);
+    expect(shellAt).toBeGreaterThan(authCardAt);
+    expect(bootAt).toBeGreaterThan(shellAt);
+    // The data/control gate stays intact: panel wiring and transport still
+    // require a stored token and a successful refresh.
+    expect(MAIN_TS).toContain("if (!getStoredToken()) return;");
+    expect(MAIN_TS).toContain("wirePanel(runtime, refreshPanel);");
+  });
+
+  it("initShell stays idempotent so boot-time + post-auth calls are safe", () => {
+    expect(SHELL_TS).toContain("shellInitDone");
+    expect(APP_TS.match(/initShell\(\)/g)).toHaveLength(1);
+  });
+});
