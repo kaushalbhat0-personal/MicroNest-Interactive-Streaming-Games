@@ -47,14 +47,40 @@
       .cc-where { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; font-size: 13px; color: var(--tb-dim); }
       /* ---- Layout: stage + operator rail + secondary ---- */
       .cc-layout { display: grid; grid-template-columns: minmax(0, 1fr) 384px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
-      /* ---- Main: game preview (stays in view while operating) ---- */
-      .cc-stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      /* ---- Main: workspace column (D3.2-B: tab panels stack here) ---- */
       #game { aspect-ratio: 16 / 9; width: 100%; background: #1a1033; border: 1px solid var(--tb-line); border-radius: 12px; overflow: hidden; position: relative; }
       #game canvas { width: 100% !important; height: 100% !important; margin: 0 !important; display: block; border: 0; border-radius: 12px; }
+      /* D3.2-A — preview owns its column. Desktop sticky lives ONLY on
+         .ov-preview (align-self:start keeps the box preview-sized so it can
+         stick inside its own column); scrolling content in the other two
+         columns can never paint beneath it. No spacer hacks, no nesting. */
+      .ov-preview { min-width: 0; }
       @media (min-width: 1100px) {
-        #game { position: sticky; top: calc(var(--tb-top-h) + 12px); z-index: 5; }
+        .ov-preview { grid-column: 1; align-self: start; position: sticky; top: calc(var(--tb-top-h) + 12px); z-index: 5; }
+        .ov-primary { grid-column: 2; }
+        .ov-secondary { grid-column: 3; }
       }
-      .cc-logs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      /* D3.2-B — status strip: glanceable truth, no live regions (the 1s
+         poll rewrites pills only when values change, so screen readers are
+         never spammed). Tones are decoration; every pill carries text. */
+      .tb-strip { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 12px 0; }
+      .tb-pill { font-size: 12.5px; font-weight: 700; padding: 5px 12px; border: 1px solid var(--tb-line); border-radius: 20px; background: #171228; color: var(--tb-dim); white-space: nowrap; }
+      .tb-pill[data-tone="ok"] { color: var(--tb-green); border-color: var(--tb-green); }
+      .tb-pill[data-tone="warn"] { color: var(--tb-gold); border-color: var(--tb-gold-deep); }
+      .tb-pill[data-tone="bad"] { color: var(--tb-rose); border-color: var(--tb-red); }
+      /* D3.2-B — tabbed workspace. Panels are plain stacks; inactive panels
+         use [hidden] (display:none, see rule below) so their controls are
+         unreachable by keyboard and invisible to assistive tech. */
+      .ws-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+      /* Higher specificity than .ghost so tab buttons share the row. */
+      .ws-tabs .ws-tab { flex: 1 1 0; width: auto; margin-top: 0; padding-left: 4px; padding-right: 4px; font-size: 14px; min-width: 0; }
+      .ws-tab[aria-selected="true"] { background: var(--tb-gold); color: #231a06; }
+      .ws-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+      .ws-panel .card { margin-bottom: 0; }
+      /* D3.2-C — operating controls moved to the rail keep their affordances:
+         disabled/end-state styling mirrors the #view-control rule (same
+         tokens, no redesign). The rites disclosure reuses .cc-drawer. */
+      .ov-secondary button:disabled, .ov-secondary button:disabled:hover { opacity: 0.45; cursor: not-allowed; }
       .card { background: #171228; border: 1px solid var(--tb-line); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
       .card h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.08em; color: var(--tb-teal); }
       .card .big { font-size: 19px; font-weight: 700; color: var(--tb-gold); line-height: 1.35; }
@@ -75,7 +101,7 @@
       button { cursor: pointer; border: 0; border-radius: 8px; padding: 9px 12px; font-weight: 700; margin-top: 8px; min-height: 44px; font-size: 15px; transition: background-color 120ms ease, border-color 120ms ease; }
       button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible,
       .tb-rail a:focus-visible, .tb-tabs a:focus-visible, .tb-alert a:focus-visible,
-      .tb-alert button:focus-visible, .skip:focus-visible, [tabindex="-1"]:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
+      .tb-alert button:focus-visible, .skip:focus-visible, [tabindex="-1"]:focus-visible, .ws-panel:focus-visible { outline: 3px solid var(--tb-gold); outline-offset: 2px; }
       button:hover { filter: brightness(1.08); }
       .primary { background: var(--tb-gold); color: #231a06; width: 100%; }
       .paid { background: var(--tb-red); color: #fff; width: 100%; }
@@ -127,7 +153,6 @@
       code { color: var(--tb-gold); }
       @media (max-width: 1100px) {
         .cc-layout { grid-template-columns: 1fr; }
-        .cc-logs { grid-template-columns: 1fr; }
         #game { position: relative; top: auto; }
         /* UX-002: compact shell, bottom tabs replace the rail. */
         .tb-rail { display: none; }
@@ -193,7 +218,7 @@
       .tb-view-title { margin: 0; padding: 14px 12px 0; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--tb-teal); }
       /* UX-003 — Overview summary layer. Same tokens, same card surface;
          hierarchy comes from type scale and one accent per state. */
-      .ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
+      .ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 360px; gap: 12px; padding: 12px; max-width: 1600px; margin: 0 auto; align-items: start; }
       .ov-primary, .ov-secondary { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
       .ov-primary .card, .ov-secondary .card { margin-bottom: 0; }
       .ov-hero { border-left: 3px solid var(--tb-gold); }
@@ -284,8 +309,12 @@
         .ac-filters .ac-filter { flex: 1 1 44%; }
       }
       @media (max-width: 1100px) {
-        .ov-grid { display: flex; flex-direction: column; }
+        /* D3.2-B: stretch fixes the D3.2-A narrow-card carryover — base
+           .ov-grid sets align-items:start for the desktop sticky columns,
+           but stacked mobile cards must fill the width. */
+        .ov-grid { display: flex; flex-direction: column; align-items: stretch; }
         .ov-primary, .ov-secondary { display: contents; }
+        .ov-preview { display: contents; }
         .ov-next { order: -3; }
         #game { order: -2; }
       }
@@ -301,7 +330,7 @@
           <div><strong>Tidebound</strong><span>keeper console</span></div>
         </div>
         <a class="tb-link" data-section="overview" href="#overview">Overview<span>Session, connection, world</span></a>
-        <a class="tb-link" data-section="control" href="#control">Control Room<span>Session, votes, rites</span></a>
+        <a class="tb-link" data-section="control" href="#control">Control Room<span>Danger zone, confirmations</span></a>
         <a class="tb-link" data-section="activity" href="#activity">Activity<span>Commands, events, diagnostics</span></a>
         <a class="tb-link" data-section="settings" href="#settings">Settings<span>Connection, rehearsal, saves</span></a>
         <p class="tb-rail__note">Tidebound keeper console — Overview · Control Room · Activity · Settings.</p>
@@ -331,44 +360,41 @@
   <main class="tb-main" id="tb-main">
     <section id="view-overview" aria-labelledby="tb-h-overview" tabindex="-1">
       <h2 class="tb-view-title" id="tb-h-overview">Overview</h2>
+      <div class="tb-strip" role="group" aria-label="System status summary">
+        <span class="tb-pill" id="ss-runtime" data-tone="neutral">Runtime · checking…</span>
+        <span class="tb-pill" id="ss-auth" data-tone="neutral">Authority · checking…</span>
+        <span class="tb-pill" id="ss-yt" data-tone="neutral">YouTube · checking…</span>
+        <span class="tb-pill" id="ss-chat" data-tone="neutral">Chat · checking…</span>
+        <span class="tb-pill" id="ss-queue" data-tone="neutral">Queue · checking…</span>
+        <span class="tb-pill" id="ss-persist" data-tone="neutral">Saves · checking…</span>
+        <span class="tb-pill" id="ss-render" data-tone="neutral">Renderers · checking…</span>
+      </div>
       <div class="ov-grid">
-        <div class="ov-primary">
+        <div class="ov-preview">
           <div id="game" role="img" aria-label="Tidebound living game world preview"></div>
-          <div class="card ov-hero" aria-live="polite" aria-label="Current story moment">
-            <h2>Story moment</h2>
-            <div class="big" id="cc-moment">—</div>
-            <div id="cc-objective">—</div>
-            <div id="cc-vex">—</div>
-          </div>
-          <div class="card ov-card" aria-labelledby="ov-act-h">
-            <h2 id="ov-act-h">Audience activity</h2>
-            <div class="dim" id="ov-queue-line">—</div>
-            <div class="dim" id="ov-paid-line">—</div>
-            <h3 class="ov-sub">Latest deeds</h3>
-            <div id="ov-deeds-preview">—</div>
-            <h3 class="ov-sub">Latest events</h3>
-            <div id="ov-feed-preview">—</div>
-            <a class="ov-more" href="#activity">Full activity →</a>
-          </div>
         </div>
-        <div class="ov-secondary">
+        <div class="ov-primary">
+          <div class="ws-tabs" role="tablist" aria-label="Workspace">
+            <button type="button" class="ghost ws-tab" role="tab" id="ws-tab-command" aria-controls="ws-panel-command" aria-selected="true">Command</button>
+            <button type="button" class="ghost ws-tab" role="tab" id="ws-tab-world" aria-controls="ws-panel-world" aria-selected="false" tabindex="-1">World</button>
+            <button type="button" class="ghost ws-tab" role="tab" id="ws-tab-youtube" aria-controls="ws-panel-youtube" aria-selected="false" tabindex="-1">YouTube</button>
+            <button type="button" class="ghost ws-tab" role="tab" id="ws-tab-activity" aria-controls="ws-panel-activity" aria-selected="false" tabindex="-1">Activity</button>
+          </div>
+          <section class="ws-panel" role="tabpanel" id="ws-panel-command" aria-labelledby="ws-tab-command" tabindex="0">
           <div class="card ov-card ov-next" id="ov-next-card" data-sev="info" aria-labelledby="ov-next-h">
             <h2 id="ov-next-h">Next action</h2>
             <div class="ov-next-title" id="ov-next-title">—</div>
             <div class="dim" id="ov-next-detail">—</div>
             <a class="ov-more" id="ov-next-link" href="#overview">Details below</a>
           </div>
-          <div class="card ov-card" aria-labelledby="ov-session-h">
-            <h2 id="ov-session-h">Session</h2>
-            <div class="ov-ids"><span class="big" id="cc-arc">—</span> <span id="cc-chapter">—</span></div>
-            <div class="dim" id="ov-persist">—</div>
+          <div class="card ov-hero" aria-live="polite" aria-label="Current story moment">
+            <h2>Story moment</h2>
+            <div class="big" id="cc-moment">—</div>
+            <div id="cc-objective">—</div>
+            <div id="cc-vex">—</div>
           </div>
-          <div class="card ov-card" aria-labelledby="ov-yt-h">
-            <h2 id="ov-yt-h">Connection</h2>
-            <div class="ov-yt-state" id="ov-yt-state">—</div>
-            <div class="dim" id="ov-yt-note">—</div>
-            <a class="ov-more" href="#settings">Connection settings →</a>
-          </div>
+          </section>
+          <section class="ws-panel" role="tabpanel" id="ws-panel-world" aria-labelledby="ws-tab-world" tabindex="0" hidden>
           <div class="card ov-card" aria-live="polite" aria-labelledby="ov-world-h">
             <h2 id="ov-world-h">World condition</h2>
             <div class="stat-row"><span id="cc-threat">—</span><span id="cc-resolve">—</span><span id="cc-supplies">—</span></div>
@@ -384,12 +410,27 @@
             <div id="ov-vote-line">—</div>
             <a class="ov-more" href="#control">Open Control Room →</a>
           </div>
-        </div>
-      </div>
-      <h2 class="tb-view-title">Full console — detail and history</h2>
-      <div class="cc-layout ov-detail">
-      <section class="cc-stage" aria-label="Full story logs">
-        <div class="cc-logs">
+          </section>
+          <section class="ws-panel" role="tabpanel" id="ws-panel-youtube" aria-labelledby="ws-tab-youtube" tabindex="0" hidden>
+          <div class="card ov-card" aria-labelledby="ov-yt-h">
+            <h2 id="ov-yt-h">Connection</h2>
+            <div class="ov-yt-state" id="ov-yt-state">—</div>
+            <div class="dim" id="ov-yt-note">—</div>
+            <a class="ov-more" href="#settings">Connection settings →</a>
+          </div>
+          <div class="card ov-card" aria-labelledby="ov-act-h">
+            <h2 id="ov-act-h">Command activity</h2>
+            <div class="dim" id="ov-queue-line">—</div>
+            <div class="dim" id="ov-paid-line">—</div>
+            <h3 class="ov-sub">Latest deeds</h3>
+            <div id="ov-deeds-preview">—</div>
+            <h3 class="ov-sub">Latest events</h3>
+            <div id="ov-feed-preview">—</div>
+            <div class="dim">Command activity only — the commands and paid catalysts the system recorded. Raw viewer chat is never shown on this console.</div>
+            <a class="ov-more" href="#activity">Full activity →</a>
+          </div>
+          </section>
+          <section class="ws-panel" role="tabpanel" id="ws-panel-activity" aria-labelledby="ws-tab-activity" tabindex="0" hidden>
           <div class="card">
             <h2>Story log</h2>
             <pre class="log" id="story-log"></pre>
@@ -398,8 +439,87 @@
             <h2>Event feed (batched)</h2>
             <pre class="log" id="feed-list"></pre>
           </div>
+          <a class="ov-more" href="#activity">Open full Activity →</a>
+          </section>
         </div>
-      </section>
+        <div class="ov-secondary" role="region" aria-label="Intervention rail">
+          <div class="card ov-card" aria-labelledby="ov-session-h">
+            <h2 id="ov-session-h">Session status</h2>
+            <div class="ov-ids"><span class="big" id="cc-arc">—</span> <span id="cc-chapter">—</span></div>
+            <div class="dim" id="ov-persist">—</div>
+          </div>
+          <section class="card cr-card" aria-labelledby="cr-session-h">
+            <h2 id="cr-session-h">Session runtime</h2>
+            <div class="dim" id="cr-session-state">—</div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-pause">Pause runtime</button>
+              <button class="primary" id="btn-resume">Resume runtime</button>
+            </div>
+            <div class="dim">Pausing holds incoming events; the world and YouTube connection are untouched. Resume lets held events flow.</div>
+          </section>
+          <section class="card" id="cc-vote-card" aria-live="polite" aria-labelledby="cr-vote-h">
+            <h2 id="cr-vote-h">Assembly vote</h2>
+            <div id="cc-vote">—</div>
+            <div class="btn-row">
+              <button class="primary" id="btn-open-v1" aria-describedby="cr-vote-why">Open route vote</button>
+              <button class="primary" id="btn-open-v2" aria-describedby="cr-vote-why">Open Kindling vote</button>
+            </div>
+            <div class="dim" id="cr-vote-why" role="status"></div>
+            <div class="btn-row">
+              <button class="ghost" id="btn-close-vote" aria-describedby="cr-vote-why">Close vote</button>
+            </div>
+            <div class="cr-override">
+              <h3>Keeper override <span class="cc-why">· bypasses the audience vote</span></h3>
+              <div class="dim">Records an auditable keeper deed and fires the chosen path immediately; ballots are left untouched and the vote closes. Use only when the story demands a keeper's call.</div>
+              <div class="btn-row">
+                <button class="ghost" id="btn-override-0" aria-describedby="cr-override-why">Lean 1st</button>
+                <button class="ghost" id="btn-override-1" aria-describedby="cr-override-why">Lean 2nd</button>
+                <button class="ghost" id="btn-override-2" aria-describedby="cr-override-why">Lean 3rd</button>
+              </div>
+              <div class="dim" id="cr-override-why" role="status"></div>
+            </div>
+          </section>
+          <details class="cc-drawer">
+            <summary>Keeper rites <span class="cc-why">· named story actions</span></summary>
+            <section class="card cr-card" aria-live="polite" aria-labelledby="cr-rites-h">
+              <h2 id="cr-rites-h">Keeper rites — named story actions</h2>
+              <div id="cc-rites-hint" class="dim">Named rites only — the assembly decides routes and burnings. Each rite tells one story; costs are paid in supplies or resolve.</div>
+              <div class="rite">
+                <button class="ghost" id="btn-rite-sable" aria-describedby="desc-rite-sable cr-rite-sable-why">Sable's mending rite</button>
+                <p class="rite-desc" id="desc-rite-sable">Tend the lantern's iron; Rho hears every hammer-fall. <span class="needs">Needs 5 supplies · ready from the first bell.</span></p>
+                <div class="dim cr-why" id="cr-rite-sable-why" role="status"></div>
+              </div>
+              <div class="rite">
+                <button class="ghost" id="btn-rite-tide" aria-describedby="desc-rite-tide cr-rite-tide-why">Tide prayer</button>
+                <p class="rite-desc" id="desc-rite-tide">Pray the keepers through the rising Gloam. <span class="needs">Needs threat 50+ and 10 supplies.</span></p>
+                <div class="dim cr-why" id="cr-rite-tide-why" role="status"></div>
+              </div>
+              <div class="rite">
+                <button class="ghost" id="btn-rite-ilya" aria-describedby="desc-rite-ilya cr-rite-ilya-why">Ilya's duel</button>
+                <p class="rite-desc" id="desc-rite-ilya">Answer steel with steel on the Highspire road; Ilya may lower her blade. <span class="needs">Needs parley, 3 kills and 10 resolve.</span></p>
+                <div class="dim cr-why" id="cr-rite-ilya-why" role="status"></div>
+              </div>
+              <div class="rite">
+                <button class="ghost" id="btn-rite-rekindle" aria-describedby="desc-rite-rekindle cr-rite-rekindle-why">Cinderholm rekindle</button>
+                <p class="rite-desc" id="desc-rite-rekindle">Rekindle the fallen beacon with oil and oath. <span class="needs">Needs Cinderholm lost, 5 beacon oil and 25 supplies.</span></p>
+                <div class="dim cr-why" id="cr-rite-rekindle-why" role="status"></div>
+              </div>
+              <div class="rite">
+                <button class="ghost" id="btn-rite-rho" aria-describedby="desc-rite-rho cr-rite-rho-why">Rho's plain speech</button>
+                <p class="rite-desc" id="desc-rite-rho">Draw Rho into plain speech; her first peal wakes the chapel-steps. <span class="needs">Needs Rho's trust (friendly) · once.</span></p>
+                <div class="dim cr-why" id="cr-rite-rho-why" role="status"></div>
+              </div>
+            </section>
+          </details>
+          <div class="card ov-card" aria-labelledby="iv-safety-h">
+            <h2 id="iv-safety-h">Safety</h2>
+            <div class="dim">Ending the stream or resetting the world stays behind a confirmation in the Control Room — never one click away.</div>
+            <a class="ov-more" href="#control">Danger zone →</a>
+          </div>
+        </div>
+      </div>
+      <h2 class="tb-view-title">Full console — detail and history</h2>
+      <div class="cc-layout ov-detail">
       <section class="cc-second" aria-label="Reference and diagnostics">
         <details class="cc-drawer">
           <summary>Audience commands <span class="cc-why">· what viewers can type</span></summary>
@@ -433,66 +553,6 @@
     <section id="view-control" aria-labelledby="tb-h-control" tabindex="-1" hidden>
       <h2 class="tb-view-title" id="tb-h-control">Control Room</h2>
       <div class="cr-grid">
-        <section class="card cr-card" aria-labelledby="cr-session-h">
-          <h2 id="cr-session-h">Session</h2>
-          <div class="dim" id="cr-session-state">—</div>
-          <div class="btn-row">
-            <button class="ghost" id="btn-pause">Pause runtime</button>
-            <button class="primary" id="btn-resume">Resume runtime</button>
-          </div>
-          <div class="dim">Pausing holds incoming events; the world and YouTube connection are untouched. Resume lets held events flow.</div>
-        </section>
-        <section class="card" id="cc-vote-card" aria-live="polite" aria-labelledby="cr-vote-h">
-          <h2 id="cr-vote-h">Assembly vote</h2>
-          <div id="cc-vote">—</div>
-          <div class="btn-row">
-            <button class="primary" id="btn-open-v1" aria-describedby="cr-vote-why">Open route vote</button>
-            <button class="primary" id="btn-open-v2" aria-describedby="cr-vote-why">Open Kindling vote</button>
-          </div>
-          <div class="dim" id="cr-vote-why" role="status"></div>
-          <div class="btn-row">
-            <button class="ghost" id="btn-close-vote" aria-describedby="cr-vote-why">Close vote</button>
-          </div>
-          <div class="cr-override">
-            <h3>Keeper override <span class="cc-why">· bypasses the audience vote</span></h3>
-            <div class="dim">Records an auditable keeper deed and fires the chosen path immediately; ballots are left untouched and the vote closes. Use only when the story demands a keeper's call.</div>
-            <div class="btn-row">
-              <button class="ghost" id="btn-override-0" aria-describedby="cr-override-why">Lean 1st</button>
-              <button class="ghost" id="btn-override-1" aria-describedby="cr-override-why">Lean 2nd</button>
-              <button class="ghost" id="btn-override-2" aria-describedby="cr-override-why">Lean 3rd</button>
-            </div>
-            <div class="dim" id="cr-override-why" role="status"></div>
-          </div>
-        </section>
-        <section class="card cr-card" aria-live="polite" aria-labelledby="cr-rites-h">
-          <h2 id="cr-rites-h">Keeper rites — named story actions</h2>
-          <div id="cc-rites-hint" class="dim">Named rites only — the assembly decides routes and burnings. Each rite tells one story; costs are paid in supplies or resolve.</div>
-          <div class="rite">
-            <button class="ghost" id="btn-rite-sable" aria-describedby="desc-rite-sable cr-rite-sable-why">Sable's mending rite</button>
-            <p class="rite-desc" id="desc-rite-sable">Tend the lantern's iron; Rho hears every hammer-fall. <span class="needs">Needs 5 supplies · ready from the first bell.</span></p>
-            <div class="dim cr-why" id="cr-rite-sable-why" role="status"></div>
-          </div>
-          <div class="rite">
-            <button class="ghost" id="btn-rite-tide" aria-describedby="desc-rite-tide cr-rite-tide-why">Tide prayer</button>
-            <p class="rite-desc" id="desc-rite-tide">Pray the keepers through the rising Gloam. <span class="needs">Needs threat 50+ and 10 supplies.</span></p>
-            <div class="dim cr-why" id="cr-rite-tide-why" role="status"></div>
-          </div>
-          <div class="rite">
-            <button class="ghost" id="btn-rite-ilya" aria-describedby="desc-rite-ilya cr-rite-ilya-why">Ilya's duel</button>
-            <p class="rite-desc" id="desc-rite-ilya">Answer steel with steel on the Highspire road; Ilya may lower her blade. <span class="needs">Needs parley, 3 kills and 10 resolve.</span></p>
-            <div class="dim cr-why" id="cr-rite-ilya-why" role="status"></div>
-          </div>
-          <div class="rite">
-            <button class="ghost" id="btn-rite-rekindle" aria-describedby="desc-rite-rekindle cr-rite-rekindle-why">Cinderholm rekindle</button>
-            <p class="rite-desc" id="desc-rite-rekindle">Rekindle the fallen beacon with oil and oath. <span class="needs">Needs Cinderholm lost, 5 beacon oil and 25 supplies.</span></p>
-            <div class="dim cr-why" id="cr-rite-rekindle-why" role="status"></div>
-          </div>
-          <div class="rite">
-            <button class="ghost" id="btn-rite-rho" aria-describedby="desc-rite-rho cr-rite-rho-why">Rho's plain speech</button>
-            <p class="rite-desc" id="desc-rite-rho">Draw Rho into plain speech; her first peal wakes the chapel-steps. <span class="needs">Needs Rho's trust (friendly) · once.</span></p>
-            <div class="dim cr-why" id="cr-rite-rho-why" role="status"></div>
-          </div>
-        </section>
         <section class="card cr-card cr-danger" aria-labelledby="cr-danger-h">
           <h2 id="cr-danger-h">Danger zone</h2>
           <div class="cr-action">

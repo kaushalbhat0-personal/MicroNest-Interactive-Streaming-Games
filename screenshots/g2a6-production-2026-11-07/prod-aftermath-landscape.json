@@ -1,0 +1,33 @@
+{
+  "name": "prod-aftermath-landscape",
+  "url": "http://localhost:5173/index.html?env=aftermath",
+  "screenshot": "prod-aftermath-landscape.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "aftermath",
+    "envMissing": [],
+    "vessel": {
+      "x": 1231.3955868915616,
+      "y": 801.7661927318239,
+      "rotation": 0.007455507776610304
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 1.3333333333333333,
+    "heapMB": 22.029876708984375
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

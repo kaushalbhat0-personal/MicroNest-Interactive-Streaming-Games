@@ -1,0 +1,33 @@
+{
+  "name": "prod-calm-landscape",
+  "url": "http://localhost:5173/index.html?env=calm",
+  "screenshot": "prod-calm-landscape.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "calm",
+    "envMissing": [],
+    "vessel": {
+      "x": 1231.4401641510076,
+      "y": 802.0041087616233,
+      "rotation": 0.007058116816700988
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 2,
+    "heapMB": 23.365020751953125
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

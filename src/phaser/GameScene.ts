@@ -26,6 +26,8 @@ import {
   VESSEL_JSON_URL,
   VESSEL_PNG_URL,
 } from "./vesselAnims";
+import { BERTH_A, PORTRAIT_ENV_STAGING, vesselBobOffset } from "./cinderholmEnv";
+import { CinderholmEnvironment } from "./cinderholmEnvRuntime";
 
 const W = 1920;
 const H = 1080;
@@ -115,6 +117,19 @@ export class GameScene extends Phaser.Scene {
 
   private reducedMotion = false;
 
+  // G2-A6 production environment (visual-only; primitives stay the fallback).
+  private cinderholmEnv: CinderholmEnvironment | null = null;
+  private envReady = false;
+  private envVesselBase = { x: 1420, y: 780 };
+  private vesselSunk = false;
+  /** Primitive fills hidden while production plates are active. */
+  private envPrimitives: Array<{ setVisible(value: boolean): unknown }> = [];
+
+  /** Stash a primitive fill hidden while production plates are active. */
+  private stashEnvPrimitive(o: { setVisible(value: boolean): unknown }): void {
+    this.envPrimitives.push(o);
+  }
+
   // T4C format-selected composition (default landscape; `?format=portrait`
   // selects the 1080×1920 reframe). WorldState, textures, Keeper/Vessel
   // containers and engine projections are shared; only positions, camera
@@ -143,6 +158,10 @@ export class GameScene extends Phaser.Scene {
     return this.format;
   }
 
+  private get envPortrait(): boolean {
+    return this.envReady && this.isPortrait;
+  }
+
   private get isPortrait(): boolean {
     return this.format === "portrait";
   }
@@ -161,14 +180,20 @@ export class GameScene extends Phaser.Scene {
 
   /** Burst/effect anchors follow the active composition (never clipped). */
   private hitAnchor(): { x: number; y: number } {
+    if (this.envPortrait) return { x: 625, y: 1300 };
     return this.isPortrait ? { x: 820, y: 680 } : { x: 1420, y: 740 };
   }
 
   private healAnchor(): { x: number; y: number } {
+    if (this.envPortrait) return { x: 452, y: 1600 };
     return this.isPortrait ? { x: 540, y: 880 } : { x: 720, y: 820 };
   }
 
   private reefAnchor(): { x: number; y: number } {
+    if (this.envPortrait) {
+      const lit = this.reefLanterns?.find((l) => l.fillColor !== 0xffd166);
+      return lit ? { x: lit.x, y: lit.y } : { x: 800, y: 1300 };
+    }
     if (this.isPortrait) {
       const lit = this.reefLanterns?.find((l) => l.fillColor !== 0xffd166);
       return lit ? { x: lit.x, y: lit.y } : { x: 540, y: 1150 };
@@ -186,9 +211,8 @@ export class GameScene extends Phaser.Scene {
     // keeps primitives whenever the texture is absent (never blank).
     this.load.atlas(KEEPER_ATLAS_KEY, KEEPER_PNG_URL, KEEPER_JSON_URL);
     this.load.atlas(VESSEL_ATLAS_KEY, VESSEL_PNG_URL, VESSEL_JSON_URL);
-  }
-
-  create(): void {
+    // Format + reduced-motion resolve here so preload can queue the
+    // environment plates for the boot composition (create reuses them).
     try {
       const params = new URLSearchParams(window.location.search);
       this.format = params.get("format") === "portrait" ? "portrait" : "landscape";
@@ -199,6 +223,29 @@ export class GameScene extends Phaser.Scene {
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // G2-A6: visual-only environment plates (WebP primary, fallback on
+    // error). Missing textures keep the primitive diorama in create().
+    let search = "";
+    try {
+      search = window.location.search;
+    } catch {
+      search = "";
+    }
+    this.cinderholmEnv = new CinderholmEnvironment(this.format, this.reducedMotion, search);
+    this.cinderholmEnv.preload(this);
+  }
+
+  create(): void {
+    // Scene restarts re-run create on the same instance: reset
+    // environment staging so pools/flags can never double-drive.
+    this.envPrimitives = [];
+    this.vesselSunk = false;
+    this.envReady = ["env-sky", "env-mountains", "env-castle", "env-sea", "env-rocks"].every((k) =>
+      this.textures.exists(k),
+    );
+    this.envVesselBase = this.isPortrait
+      ? this.envReady ? { x: PORTRAIT_ENV_STAGING.vessel.x, y: PORTRAIT_ENV_STAGING.vessel.y } : { x: 820, y: 720 }
+      : { x: BERTH_A.x, y: BERTH_A.y };
 
     // Shared 8px dot texture for particles.
     if (!this.textures.exists("px")) {
@@ -223,8 +270,8 @@ export class GameScene extends Phaser.Scene {
     this.buildStaticMarkers();
     this.buildMist();
 
-    // Ambient sea spray (behind entities).
-    if (this.textures.exists("px") && !this.reducedMotion) {
+    // Ambient sea spray (behind entities; skipped under production plates).
+    if (this.textures.exists("px") && !this.reducedMotion && !this.envReady) {
       const spray = this.add.particles(0, 0, "px", {
         x: { min: 0, max: this.isPortrait ? 440 : 680 },
         y: { min: this.HZ + 35, max: Math.min(this.HZ + 340, this.WH - 60) },
@@ -240,6 +287,19 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.cameras.main.setBounds(0, 0, this.WW, this.WH);
+
+    // G2-A6: build production plates (no-op fallback when textures miss),
+    // hide the primitive fills they replace, and arm SHUTDOWN disposal so
+    // repeated scene creation/destruction can never double-drive pools.
+    const envOn = this.cinderholmEnv?.create(this, this.WW, this.WH) ?? false;
+    this.envReady = this.envReady && envOn;
+    if (this.envReady) {
+      for (const o of this.envPrimitives) o.setVisible(false);
+    }
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.cinderholmEnv?.dispose();
+      this.cinderholmEnv = null;
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -254,6 +314,23 @@ export class GameScene extends Phaser.Scene {
     // beacon and light pulses are scene-owned Phaser tweens.
     if (this.driftFar) this.driftFar.tilePositionX += delta * 0.0024;
     if (this.driftNear) this.driftNear.tilePositionX -= delta * 0.0034;
+    // G2-A6: production environment advance (zero-tween sine phase) + berth
+    // bob around the approved staging. Skipped while the vessel is sunk
+    // (syncWorld owns the repelled rest pose).
+    if (this.cinderholmEnv && this.cinderholmEnv.active) {
+      this.cinderholmEnv.update(delta);
+      // The bob owns vessel position only while effect motion runs; a
+      // frozen clock (fx=0) or repelled rest pose keeps the staged base.
+      const bobOn = this.cinderholmEnv.ctl.enabled.motion && !this.cinderholmEnv.fxDisabled;
+      if (!this.vesselSunk && bobOn) {
+        const o = vesselBobOffset(this.cinderholmEnv.envTime, this.cinderholmEnv.ctl.current.bob);
+        this.vessel.setPosition(this.envVesselBase.x + o.x, this.envVesselBase.y + o.y);
+        this.vessel.setAngle((o.rotation * 180) / Math.PI);
+      } else if (!this.vesselSunk) {
+        this.vessel.setPosition(this.envVesselBase.x, this.envVesselBase.y);
+        this.vessel.setAngle(0);
+      }
+    }
   }
 
   // ---------- state sync (called by app after every pump/tick) ----------
@@ -276,6 +353,9 @@ export class GameScene extends Phaser.Scene {
 
     // Cinderholm condition drives the lantern (lighthouse anchor).
     const cinder = w.locationState["cinderholm"] ?? "sound";
+    if (this.cinderholmEnv && this.cinderholmEnv.active) {
+      this.cinderholmEnv.applyGrade(w.threatLevel, cinder, drivenOff);
+    }
     if (cinder === "lost") {
       this.lampCore.setFillStyle(0x4a4360, 1);
       this.lampGlow.setFillStyle(0x4a4360, 0.1).setVisible(true);
@@ -301,11 +381,13 @@ export class GameScene extends Phaser.Scene {
     // T4C: keep bar moved east (x205 → x340) to clear the left HUD rail
     // (x20–324); labels ride centered above the bar (cx 435).
     // Portrait reframe anchors below (isPortrait branch).
+    const EP = this.envPortrait;
     const keepBarX = this.isPortrait ? 445 : 340;
     const keepBarY = this.isPortrait ? 640 : 592;
-    const heroBarX = this.isPortrait ? 448 : 628;
-    const heroBarY = this.isPortrait ? 1026 : 926;
-    const vesselBarX = this.isPortrait ? 720 : 1280;
+    const heroBarX = this.isPortrait ? (EP ? 362 : 448) : 628;
+    const heroBarY = this.isPortrait ? (EP ? 1745 : 1026) : 926;
+    const vesselBarX = this.isPortrait ? (EP ? 525 : 720) : 1280;
+    const vesselBarY = EP ? 1225 : 566;
     this.drawBar(this.keepBar, keepBarX, keepBarY, 190, w.keepHp, w.maxKeepHp, 0x90be6d);
     this.keepHpText.setText(`Keep ${w.keepHp}/${w.maxKeepHp}`);
     this.keepLabel.setText(cinder === "lost" ? "CINDERHOLM · FALLEN" : "CINDERHOLM");
@@ -315,11 +397,12 @@ export class GameScene extends Phaser.Scene {
     this.heroHpText.setText(`Keeper ${w.heroHp}/${w.maxHeroHp}`);
 
     const sunk = w.enemy.hp <= 0;
-    this.drawBar(this.vesselBar, vesselBarX, 566, 200, Math.max(0, w.enemy.hp), w.enemy.maxHp, 0xe63946);
+    this.vesselSunk = sunk;
+    this.drawBar(this.vesselBar, vesselBarX, vesselBarY, 200, Math.max(0, w.enemy.hp), w.enemy.maxHp, 0xe63946);
     this.vesselHpText.setText(sunk ? "REPELLED" : `${w.enemy.hp}/${w.enemy.maxHp}`);
     this.vesselLabel.setText(w.enemy.isElite ? `ELITE · ${w.enemy.name}` : w.enemy.name);
     this.vesselBody.setFillStyle(w.enemy.isElite ? 0x6a040f : 0x9d0208);
-    const vesselHomeY = this.isPortrait ? 720 : 780;
+    const vesselHomeY = this.isPortrait ? (this.envPortrait ? 1385 : 720) : 800;
     this.vessel.setAlpha(sunk ? 0.45 : 1).setAngle(sunk ? 9 : 0).setY(sunk ? vesselHomeY + 32 : vesselHomeY);
     for (const l of this.vesselLights) l.setVisible(!sunk);
 
@@ -405,7 +488,10 @@ export class GameScene extends Phaser.Scene {
       } else {
         this.flash(this.vesselBody, 0xffffff);
       }
-      this.tweens.add({ targets: this.vessel, x: "+=18", duration: 70, yoyo: true, repeat: 3 });
+      // The production bob owns vessel position; skip the shake tween there.
+      if (!this.cinderholmEnv?.active) {
+        this.tweens.add({ targets: this.vessel, x: "+=18", duration: 70, yoyo: true, repeat: 3 });
+      }
       const p = this.hitAnchor();
       this.burst(p.x, p.y, 0xffd166);
     }
@@ -456,6 +542,7 @@ export class GameScene extends Phaser.Scene {
     const HZ = this.HZ;
     const P = this.isPortrait;
     const bg = this.add.graphics().setDepth(0);
+    this.stashEnvPrimitive(bg);
     bg.fillGradientStyle(0x0d0a1a, 0x0d0a1a, 0x2a1a4d, 0x16324a, 1);
     bg.fillRect(0, 0, WW, HZ + 2);
     // Storm bands.
@@ -471,11 +558,12 @@ export class GameScene extends Phaser.Scene {
       const x = hash01(i * 3 + 1) * WW;
       const y = hash01(i * 7 + 2) * 360;
       const a = 0.25 + hash01(i * 13 + 5) * 0.55;
-      this.add.circle(x, y, hash01(i + 9) > 0.8 ? 2.4 : 1.4, 0xf4efe4, a).setDepth(0);
+      this.stashEnvPrimitive(this.add.circle(x, y, hash01(i + 9) > 0.8 ? 2.4 : 1.4, 0xf4efe4, a).setDepth(0));
     }
 
     // Moon + halo (portrait recentered to x~800 y180).
     this.moon = this.add.container(P ? 800 : 1560, 175).setDepth(1);
+    this.stashEnvPrimitive(this.moon);
     const halo = this.add.circle(0, 0, 74, 0xf4efe4, 0.1);
     this.moonDisc = this.add.circle(0, 0, 46, 0xf4efe4, 0.95);
     const shade = this.add.circle(-14, -10, 40, 0x0d0a1a, 0.16);
@@ -495,8 +583,9 @@ export class GameScene extends Phaser.Scene {
         ];
     for (const [x, y, cw, ch] of cloudDefs) {
       const c = this.add.ellipse(x, y, cw, ch, 0x141021, 0.38).setDepth(1);
+      this.stashEnvPrimitive(c);
       this.clouds.push(c);
-      if (!this.reducedMotion) {
+      if (!this.reducedMotion && !this.envReady) {
         this.tweens.add({ targets: c, x: x + 22, alpha: 0.44, duration: 32000 + x * 3, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
     }
@@ -513,14 +602,16 @@ export class GameScene extends Phaser.Scene {
         ];
     for (const [x, y, cw, ch] of farCloudDefs) {
       const c = this.add.ellipse(x, y, cw, ch, 0x1c1440, 0.26).setDepth(0);
+      this.stashEnvPrimitive(c);
       this.clouds.push(c);
-      if (!this.reducedMotion) {
+      if (!this.reducedMotion && !this.envReady) {
         this.tweens.add({ targets: c, x: x + 34, alpha: 0.32, duration: 48000 + x * 3, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
     }
 
     // Distant drowned silhouettes on the horizon.
     const far = this.add.graphics().setDepth(1);
+    this.stashEnvPrimitive(far);
     far.fillStyle(0x1c1440, 1);
     if (P) {
       far.fillEllipse(400, HZ + 6, 500, 120);
@@ -547,6 +638,7 @@ export class GameScene extends Phaser.Scene {
     const HZ = this.HZ;
     const P = this.isPortrait;
     const sea = this.add.graphics().setDepth(1);
+    this.stashEnvPrimitive(sea);
     sea.fillGradientStyle(0x16324a, 0x16324a, 0x0b1626, 0x0b1626, 1);
     sea.fillRect(0, HZ, WW, WH - HZ);
     // Moon road.
@@ -568,6 +660,8 @@ export class GameScene extends Phaser.Scene {
   private drawWaves(): void {
     const g = this.waves;
     if (!g) return;
+    // Production plates carry their own sea motion; never redraw over them.
+    if (this.envReady) return;
     const WW = this.WW;
     const HZ = this.HZ;
     g.clear();
@@ -667,6 +761,8 @@ export class GameScene extends Phaser.Scene {
    */
   private buildSeaDrift(): void {
     this.makeDriftTextures();
+    // Production plates carry their own sea motion (zero duplicate drivers).
+    if (this.envReady) return;
     const WW = this.WW;
     const WH = this.WH;
     const HZ = this.HZ;
@@ -697,6 +793,8 @@ export class GameScene extends Phaser.Scene {
    * Depth 2–3, always behind entities (depth 4+). Static under reduced motion.
    */
   private buildMist(): void {
+    // Production mist layer replaces these banks (no duplicate motion).
+    if (this.envReady) return;
     const HZ = this.HZ;
     const P = this.isPortrait;
     const banks: Array<[number, number, number, number, number]> = P
@@ -728,6 +826,7 @@ export class GameScene extends Phaser.Scene {
     const icy = P ? 560 : 760;
     // Island rock + cliffs.
     const rock = this.add.graphics().setDepth(2);
+    this.stashEnvPrimitive(rock);
     rock.fillStyle(0x1c2233, 1);
     rock.fillEllipse(icx, icy, 560, 210);
     rock.fillStyle(0x2b3448, 1);
@@ -737,6 +836,7 @@ export class GameScene extends Phaser.Scene {
 
     // Keep walls + lighthouse tower (the lantern anchor).
     const keep = this.add.graphics().setDepth(3);
+    this.stashEnvPrimitive(keep);
     if (P) {
       keep.fillStyle(0x3a4358, 1); // curtain wall
       keep.fillRect(440, 500, 200, 130);
@@ -808,21 +908,25 @@ export class GameScene extends Phaser.Scene {
     this.beamCore.setAlpha(0.055);
     this.beamSweep = this.add.container(lampX, lampY, [this.beam, this.beamCore]);
     this.beamSweep.setDepth(2);
-    if (!this.reducedMotion) {
+    this.stashEnvPrimitive(this.beamSweep);
+    if (!this.reducedMotion && !this.envReady) {
       // Slow bounded sweep (subtle at 4 FPS capture; never full rotation).
       this.tweens.add({ targets: this.beamSweep, angle: 2.2, duration: 20000, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.tweens.add({ targets: this.beamCore, alpha: 0.085, duration: 6800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
 
     this.lampGlow = this.add.circle(lampX, lampY, 46, 0xffd166, 0.28).setDepth(4);
+    this.stashEnvPrimitive(this.lampGlow);
     this.lampCore = this.add.circle(lampX, lampY, 15, 0xffd166, 1).setDepth(5);
-    if (!this.reducedMotion) {
+    this.stashEnvPrimitive(this.lampCore);
+    if (!this.reducedMotion && !this.envReady) {
       this.tweens.add({ targets: this.lampGlow, scale: 1.25, alpha: 0.16, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
     // W1: lantern-room flicker (warm glass breathing; lost state recolors
     // the core via syncWorld, flicker follows the same lamp).
     this.lanternFlicker = this.add.circle(lampX, lampY, 24, 0xfff3d6, 0.5).setDepth(4);
-    if (!this.reducedMotion) {
+    this.stashEnvPrimitive(this.lanternFlicker);
+    if (!this.reducedMotion && !this.envReady) {
       this.tweens.add({ targets: this.lanternFlicker, alpha: 0.22, scale: 1.18, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
     // W1: shoreline foam caps at the island waterline (gentle pulse only).
@@ -840,9 +944,10 @@ export class GameScene extends Phaser.Scene {
         ];
     for (const [fx, fy, fr] of foamSpots) {
       const cap = this.add.circle(fx, fy, fr, 0xf4efe4, 0.16).setDepth(3);
+      this.stashEnvPrimitive(cap);
       this.foamCaps.push(cap);
     }
-    if (!this.reducedMotion) {
+    if (!this.reducedMotion && !this.envReady) {
       for (let i = 0; i < this.foamCaps.length; i++) {
         this.tweens.add({ targets: this.foamCaps[i], alpha: 0.22, duration: 3600 + i * 650, scale: 1.06, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
@@ -989,11 +1094,20 @@ export class GameScene extends Phaser.Scene {
 
   private buildSkiff(): void {
     const P = this.isPortrait;
-    const skiff = P ? { x: 540, y: 900 } : { x: 720, y: 800 };
+    // Portrait production staging rides the rock-shelf waterline in the
+    // cover-fit plate (approval 2); other compositions keep their homes.
+    const skiff = P
+      ? this.envPortrait ? { x: PORTRAIT_ENV_STAGING.skiff.x, y: PORTRAIT_ENV_STAGING.skiff.y } : { x: 540, y: 900 }
+      : { x: 720, y: 800 };
     // Keeper skiff riding the swell.
     const hull = this.add.graphics().setDepth(3);
     hull.fillStyle(0x4a3728, 1);
-    if (P) {
+    if (this.envPortrait) {
+      hull.fillTriangle(342, 1630, 562, 1630, 522, 1675);
+      hull.fillRect(352, 1618, 200, 18);
+      hull.lineStyle(2, 0xffd166, 0.35);
+      hull.lineBetween(352, 1618, 552, 1618);
+    } else if (P) {
       hull.fillTriangle(430, 950, 650, 950, 610, 995);
       hull.fillRect(440, 938, 200, 18);
       hull.lineStyle(2, 0xffd166, 0.35);
@@ -1017,56 +1131,65 @@ export class GameScene extends Phaser.Scene {
     // Keep the feet anchored to the skiff during idle; environmental water
     // supplies motion without a character-only bob that reads as foot sliding.
     // Stern lantern (flares on heal).
-    const lanternPos = P ? { x: 598, y: 860 } : { x: 778, y: 760 };
-    const pole = this.add.rectangle(P ? 598 : 778, P ? 896 : 796, 6, 60, 0x6c757d).setDepth(4);
+    const lanternPos = this.envPortrait ? { x: 510, y: 1540 } : P ? { x: 598, y: 860 } : { x: 778, y: 760 };
+    const pole = this.add.rectangle(this.envPortrait ? 510 : P ? 598 : 778, this.envPortrait ? 1576 : P ? 896 : 796, 6, 60, 0x6c757d).setDepth(4);
     void pole;
     this.skiffLantern = this.add.circle(lanternPos.x, lanternPos.y, 11, 0xffd166, 1).setDepth(5);
     this.add.circle(lanternPos.x, lanternPos.y, 24, 0xffd166, 0.22).setDepth(4);
 
     this.heroBar = this.add.graphics().setDepth(7);
     this.add
-      .text(P ? 540 : 720, P ? 978 : 878, "KEEPER'S SKIFF", { fontSize: P ? "30px" : "24px", color: "#b7f7c9", fontStyle: "bold" })
+      .text(this.envPortrait ? 452 : P ? 540 : 720, this.envPortrait ? 1692 : P ? 978 : 878, "KEEPER'S SKIFF", { fontSize: P ? "30px" : "24px", color: "#b7f7c9", fontStyle: "bold" })
       .setOrigin(0.5, 0)
       .setDepth(7);
     this.heroHpText = this.add
-      .text(P ? 540 : 720, P ? 1010 : 906, "", { fontSize: P ? "28px" : "22px", color: "#b9b3c7" })
+      .text(this.envPortrait ? 452 : P ? 540 : 720, this.envPortrait ? 1724 : P ? 1010 : 906, "", { fontSize: P ? "28px" : "22px", color: "#b9b3c7" })
       .setOrigin(0.5, 0)
       .setDepth(7);
   }
 
   private buildReef(): void {
     const P = this.isPortrait;
-    const rcx = P ? 540 : 1050;
-    const rcy = P ? 1240 : 940;
+    const EP = this.envPortrait;
+    const rcx = P ? (EP ? PORTRAIT_ENV_STAGING.reef.x : 540) : 1050;
+    const rcy = P ? (EP ? PORTRAIT_ENV_STAGING.reef.y : 1240) : 940;
     // Pale Reaches: low misty reef with five chart-lantern posts.
     const reef = this.add.graphics().setDepth(2);
+    this.stashEnvPrimitive(reef);
     reef.fillStyle(0x232b3d, 1);
     reef.fillEllipse(rcx, rcy, 560, 120);
     reef.fillStyle(0x2e3a52, 1);
-    reef.fillEllipse(P ? 490 : 1000, P ? 1220 : 920, 380, 80);
+    reef.fillEllipse(rcx - 50, rcy - 20, 380, 80);
     // Mist.
     reef.fillStyle(0xb9b3c7, 0.08);
-    reef.fillEllipse(rcx, P ? 1200 : 900, 620, 90);
+    reef.fillEllipse(rcx, rcy - 40, 620, 90);
 
     this.reefLanterns = [];
     for (let i = 0; i < 5; i++) {
-      const x = P ? 340 + i * 100 : 850 + i * 100;
-      const yBase = P ? 1184 : 884;
-      const yLamp = P ? 1150 : 850;
+      const x = P ? (EP ? 620 + i * 90 : 340 + i * 100) : 850 + i * 100;
+      const yBase = rcy - 56;
+      const yLamp = rcy - 90;
       this.add.rectangle(x, yBase, 8, 56, 0x4a4360).setDepth(3);
       const lamp = this.add.circle(x, yLamp, 12, 0x3a3454, 1).setDepth(4);
       this.add.circle(x, yLamp, 24, 0xffd166, 0).setDepth(3);
       this.reefLanterns.push(lamp);
     }
     this.reefLabel = this.add
-      .text(P ? 540 : 1050, P ? 1262 : 962, "", { fontSize: P ? "28px" : "22px", color: "#90e0ef" })
+      .text(rcx, rcy + 22, "", { fontSize: P ? "28px" : "22px", color: "#90e0ef" })
       .setOrigin(0.5, 0)
       .setDepth(7);
   }
 
   private buildVessel(): void {
     const P = this.isPortrait;
-    const home = P ? { x: 820, y: 720 } : { x: 1420, y: 780 };
+    // G2-A6: approved berth A in landscape. Portrait production staging
+    // moors in the open-water slot of the cover-fit plate (approval 2);
+    // the primitive fallback keeps the GameScene home.
+    const home = P
+      ? this.envPortrait
+        ? { x: PORTRAIT_ENV_STAGING.vessel.x, y: PORTRAIT_ENV_STAGING.vessel.y }
+        : { x: 820, y: 720 }
+      : { x: BERTH_A.x, y: BERTH_A.y };
     // Gloam Vessel: siege hull offshore, gloam-lit.
     this.vessel = this.add.container(home.x, home.y).setDepth(4);
     this.vesselBody = this.add.rectangle(0, 0, 210, 84, 0x9d0208);
@@ -1084,10 +1207,10 @@ export class GameScene extends Phaser.Scene {
       this.vesselLights.push(l);
     }
     const spriteReady = this.setupVesselSprite();
-    if (!this.reducedMotion && !spriteReady) {
+    if (!this.reducedMotion && !spriteReady && !this.envReady) {
       this.tweens.add({ targets: this.vessel, y: home.y + 12, duration: 2600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
     }
-    if (!this.reducedMotion && !spriteReady) {
+    if (!this.reducedMotion && !spriteReady && !this.envReady) {
       for (let i = 0; i < this.vesselLights.length; i++) {
         this.tweens.add({ targets: this.vesselLights[i], alpha: 0.45, duration: 700 + i * 260, yoyo: true, repeat: -1 });
       }
@@ -1095,16 +1218,17 @@ export class GameScene extends Phaser.Scene {
     // Hull wake.
     const wake = this.add.graphics().setDepth(3);
     wake.lineStyle(2, 0x90e0ef, 0.3);
-    if (this.isPortrait) wake.lineBetween(690, 770, 950, 770);
-    else wake.lineBetween(1290, 830, 1550, 830);
+    if (this.envPortrait) wake.lineBetween(495, 1435, 755, 1435);
+    else if (this.isPortrait) wake.lineBetween(690, 770, 950, 770);
+    else wake.lineBetween(1100, 830, 1360, 830);
 
     this.vesselBar = this.add.graphics().setDepth(7);
     this.vesselLabel = this.add
-      .text(this.isPortrait ? 820 : 1420, this.isPortrait ? 500 : 630, "", { fontSize: this.isPortrait ? "32px" : "26px", color: "#ff8fa3", fontStyle: "bold" })
+      .text(this.envPortrait ? 625 : this.isPortrait ? 820 : 1420, this.envPortrait ? 1160 : this.isPortrait ? 500 : 630, "", { fontSize: this.isPortrait ? "32px" : "26px", color: "#ff8fa3", fontStyle: "bold" })
       .setOrigin(0.5, 0)
       .setDepth(7);
     this.vesselHpText = this.add
-      .text(this.isPortrait ? 820 : 1420, this.isPortrait ? 534 : 660, "", { fontSize: this.isPortrait ? "28px" : "22px", color: "#b9b3c7" })
+      .text(this.envPortrait ? 625 : this.isPortrait ? 820 : 1420, this.envPortrait ? 1194 : this.isPortrait ? 534 : 660, "", { fontSize: this.isPortrait ? "28px" : "22px", color: "#b9b3c7" })
       .setOrigin(0.5, 0)
       .setDepth(7);
   }
@@ -1154,10 +1278,17 @@ export class GameScene extends Phaser.Scene {
 
   private buildChapelBrazier(): void {
     const P = this.isPortrait;
+    const EP = this.envPortrait;
     // Chapel Steps: stair cut into Cinderholm's flank + story brazier.
+    // Portrait production staging seats the brazier on the left rock shelf
+    // of the cover-fit plate (approval 2).
     const steps = this.add.graphics().setDepth(3);
     steps.fillStyle(0x4a4360, 1);
-    if (P) {
+    if (EP) {
+      steps.fillRect(140, 1600, 90, 16);
+      steps.fillRect(150, 1584, 80, 16);
+      steps.fillRect(160, 1568, 70, 16);
+    } else if (P) {
       steps.fillRect(310, 1080, 90, 16);
       steps.fillRect(320, 1064, 80, 16);
       steps.fillRect(330, 1048, 70, 16);
@@ -1166,14 +1297,14 @@ export class GameScene extends Phaser.Scene {
       steps.fillRect(480, 764, 80, 16);
       steps.fillRect(490, 748, 70, 16);
     }
-    this.add.rectangle(P ? 365 : 525, P ? 1026 : 726, 34, 22, 0x2b2d42).setDepth(3);
-    this.chapelFlame = this.add.circle(P ? 365 : 525, P ? 1006 : 706, 12, 0xff9a3c, 1).setDepth(4);
-    this.add.circle(P ? 365 : 525, P ? 1006 : 706, 24, 0xff9a3c, 0.2).setDepth(3);
+    this.add.rectangle(EP ? 195 : P ? 365 : 525, EP ? 1546 : P ? 1026 : 726, 34, 22, 0x2b2d42).setDepth(3);
+    this.chapelFlame = this.add.circle(EP ? 195 : P ? 365 : 525, EP ? 1526 : P ? 1006 : 706, 12, 0xff9a3c, 1).setDepth(4);
+    this.add.circle(EP ? 195 : P ? 365 : 525, EP ? 1526 : P ? 1006 : 706, 24, 0xff9a3c, 0.2).setDepth(3);
     if (!this.reducedMotion) {
       this.tweens.add({ targets: this.chapelFlame, scale: 1.35, alpha: 0.75, duration: 620, yoyo: true, repeat: -1 });
     }
     this.chapelLabel = this.add
-      .text(P ? 365 : 525, P ? 1100 : 800, "CHAPEL STEPS", { fontSize: P ? "26px" : "20px", color: "#b9b3c7" })
+      .text(EP ? 195 : P ? 365 : 525, EP ? 1620 : P ? 1100 : 800, "CHAPEL STEPS", { fontSize: P ? "26px" : "20px", color: "#b9b3c7" })
       .setOrigin(0.5, 0)
       .setDepth(7);
   }

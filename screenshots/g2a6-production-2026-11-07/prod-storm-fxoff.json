@@ -1,0 +1,33 @@
+{
+  "name": "prod-storm-fxoff",
+  "url": "http://localhost:5173/index.html?env=storm&fx=0",
+  "screenshot": "prod-storm-fxoff.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "storm",
+    "envMissing": [],
+    "vessel": {
+      "x": 1231.4494897962848,
+      "y": 800,
+      "rotation": 0.013875237870006885
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": false
+    }
+  },
+  "perf": {
+    "fps": 3,
+    "heapMB": 24.7955322265625
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

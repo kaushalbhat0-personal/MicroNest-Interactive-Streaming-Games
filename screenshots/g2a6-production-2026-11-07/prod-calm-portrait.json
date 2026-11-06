@@ -1,0 +1,33 @@
+{
+  "name": "prod-calm-portrait",
+  "url": "http://localhost:5173/index.html?format=portrait&env=calm",
+  "screenshot": "prod-calm-portrait.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "portrait",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "calm",
+    "envMissing": [],
+    "vessel": {
+      "x": 821.4401024886912,
+      "y": 722.0037609200313,
+      "rotation": 0.007058833739325365
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 2.3333333333333335,
+    "heapMB": 24.7955322265625
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

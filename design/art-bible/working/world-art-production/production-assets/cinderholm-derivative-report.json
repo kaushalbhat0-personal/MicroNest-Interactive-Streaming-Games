@@ -1,0 +1,381 @@
+{
+  "task": "G2-A6 cinderholm production derivatives",
+  "approvals": "G2-A5.1 binding decisions 1-11; rights clearance approved by user",
+  "sourcePolicy": "read-only; rejected twins/concepts never published",
+  "entries": [
+    {
+      "source": "design/art-bible/working/p1-environment/p1-sky/tidebound-sky-1.jpg",
+      "sourceSha256": "676A8283F915B332996369F53734CB951257533AA3E579569CD7D0823D4D7C78",
+      "sourceDimensions": [
+        2096,
+        1184
+      ],
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sky.webp",
+          "sha256": "62B00CA331251E7692DB7C6D13FA2854B15CE5D8A6CCAE672D68D4639860BCC7",
+          "bytes": 66950,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sky.jpg",
+          "sha256": "F8396001CEBD9E2F6216BB975F117F264F6377CB8B8B73C7CA365FD9F27DA0A8",
+          "bytes": 173023,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/p1-environment/p1-waves/tidebound-waves-1.jpg",
+      "sourceSha256": "580A42A4C52D84A765CCC426384E6B9C40D8F82A9350442ECF6E4AD7811B7E18",
+      "sourceDimensions": [
+        2096,
+        1184
+      ],
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sea.webp",
+          "sha256": "09C498A942DCE79AE47510DDA62785EF00BB7A4A8E4E167B6A6B0B24FB43A7BC",
+          "bytes": 163276,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sea.jpg",
+          "sha256": "C83F567FB47167341C9D6FE54C79F571C42CE609A078EE97AE4068D8FE301362",
+          "bytes": 317519,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/p1-environment/p1-farmountains/tidebound-farmountains-1-png.png",
+      "sourceSha256": "72E7B46552D0C63A2B568065264E107C90A1A0533C29692C33C870060943EE81",
+      "sourceDimensions": [
+        2096,
+        1184
+      ],
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mountains.webp",
+          "sha256": "4D794EBB57AFCEF3FC01A651527EC5495061651A9A7BA30F5DA3D110019DA84E",
+          "bytes": 220306,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mountains.png",
+          "sha256": "067008E3DC8CD4C4152C2183CA5193B92A79A69F3CFFC3FC59B16225446BD19E",
+          "bytes": 1374410,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/p1-environment/p1-castlewithlighhouse/tidebound-castle-lighthouse.png",
+      "sourceSha256": "C1C4CC5BAACDAFC1C86E099B5815B1EA93C6C4C2BD881988811C96D0D5962055",
+      "sourceDimensions": [
+        2096,
+        1184
+      ],
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_castle.webp",
+          "sha256": "5B603F61C0F74F595E3AE709B5006A709339839D728BB9BFD3ECEBF24D11B448",
+          "bytes": 196190,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_castle.png",
+          "sha256": "665DDEC79D23C20A65DF3D9A2110FC17C8CAC994EEABEE515F2B10C5F5A2F1AD",
+          "bytes": 1774298,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/p1-environment/p1-frontrocks/tidebound-frontstones.png",
+      "sourceSha256": "711CFA099CD7E7F6D63402979ECB437E1CF8A86A9934B9DC636A18F91F27CBEA",
+      "sourceDimensions": [
+        2096,
+        1184
+      ],
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_frontstones.webp",
+          "sha256": "E754EE12695B104289D2A23A6CD37D495D993AA1243F0AF63420BBF4D4640405",
+          "bytes": 177818,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_frontstones.png",
+          "sha256": "7238904044451934F50C190BBF0D37B55340E612F71084C77A2829DA6222B10A",
+          "bytes": 1457326,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/water-sheen-landscape.png",
+      "sourceSha256": "83C7F9EB8869F7779388C0D4A54E5BF819057BA752C630DF3FE3A17FCBF2E9DD",
+      "sourceDimensions": [
+        1920,
+        1080
+      ],
+      "alphaPeak": 20,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sheen_landscape.webp",
+          "sha256": "098FF9685851FC884CB998FCE8D6707A00DB79A1D0D1336B5736884D6BEAD2E4",
+          "bytes": 10722,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sheen_landscape.png",
+          "sha256": "83C7F9EB8869F7779388C0D4A54E5BF819057BA752C630DF3FE3A17FCBF2E9DD",
+          "bytes": 10839,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/water-sheen-portrait.png",
+      "sourceSha256": "C33B4C05AB7109BD2F4D20464DB6605C1E989AEC8CC5C22BC8E6D8F9044DAE0B",
+      "sourceDimensions": [
+        1080,
+        1920
+      ],
+      "alphaPeak": 20,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sheen_portrait.webp",
+          "sha256": "4EC2F0C93A7F1D69406B38FBD2F59D4D9639CE025C42035C87B59A2A97E0E2AC",
+          "bytes": 9580,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_sheen_portrait.png",
+          "sha256": "C33B4C05AB7109BD2F4D20464DB6605C1E989AEC8CC5C22BC8E6D8F9044DAE0B",
+          "bytes": 10760,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/mist-landscape.png",
+      "sourceSha256": "D9E4984E5062E2C99ACDC6475D5E2964F45182322AB7B64C26A12D24AEBCC988",
+      "sourceDimensions": [
+        1920,
+        1080
+      ],
+      "alphaPeak": 41,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mist_landscape.webp",
+          "sha256": "1D14ECC1F4C9E5973A435EE6FAE98906E00ABD19E0F5036485725FB03B015140",
+          "bytes": 16144,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mist_landscape.png",
+          "sha256": "D9E4984E5062E2C99ACDC6475D5E2964F45182322AB7B64C26A12D24AEBCC988",
+          "bytes": 25672,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/mist-portrait.png",
+      "sourceSha256": "0FA788A2C8BF72B7D7302841266ED0895957F9E0675866003C61836EE130C332",
+      "sourceDimensions": [
+        1080,
+        1920
+      ],
+      "alphaPeak": 36,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mist_portrait.webp",
+          "sha256": "1462E5270EB8FCC8213D4858C68573929E21DFB6AB0E5EAD59B666D2759AA1D2",
+          "bytes": 13624,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_mist_portrait.png",
+          "sha256": "0FA788A2C8BF72B7D7302841266ED0895957F9E0675866003C61836EE130C332",
+          "bytes": 21927,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/beacon-beam-anim-landscape.png",
+      "sourceSha256": "32EFCA9F8776491E6B6550C5BA0F89FEEDAD3693B97023EF17E27DD9D9DCCEA4",
+      "sourceDimensions": [
+        1920,
+        1080
+      ],
+      "alphaPeak": 144,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_landscape.webp",
+          "sha256": "6A78542AE483E8824FEE60FF9E942107A8A83A5D95F15C03492920383D8DEB02",
+          "bytes": 17878,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_landscape.png",
+          "sha256": "32EFCA9F8776491E6B6550C5BA0F89FEEDAD3693B97023EF17E27DD9D9DCCEA4",
+          "bytes": 27823,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/beacon-beam-anim-portrait.png",
+      "sourceSha256": "DBF4BE9EBE4046190ECB7900C58899AFD049F4EA5E2A135118B33116BBC67FF5",
+      "sourceDimensions": [
+        1080,
+        1920
+      ],
+      "alphaPeak": 148,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_portrait.webp",
+          "sha256": "9FFFA76D6DE647A1BBAD22B4F4F9EE6586FC046ABD0C8030ACB4B2FFB8CDB43B",
+          "bytes": 19556,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_portrait.png",
+          "sha256": "DBF4BE9EBE4046190ECB7900C58899AFD049F4EA5E2A135118B33116BBC67FF5",
+          "bytes": 30532,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/beacon-beam-anim-soft-landscape.png",
+      "sourceSha256": "A7A3120849F5B7AF5D716D56E6E5639947BD79B79B5892311CAA8D4502B01462",
+      "sourceDimensions": [
+        1920,
+        1080
+      ],
+      "alphaPeak": 72,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_soft_landscape.webp",
+          "sha256": "D8D1019D10159FE51419FF3B021ADC25B3CE01BBFF672216A08494C2CF5426DA",
+          "bytes": 17878,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_soft_landscape.png",
+          "sha256": "A7A3120849F5B7AF5D716D56E6E5639947BD79B79B5892311CAA8D4502B01462",
+          "bytes": 27809,
+          "dimensions": [
+            1920,
+            1080
+          ]
+        }
+      ]
+    },
+    {
+      "source": "design/art-bible/working/world-art-production/previews/assets/beacon-beam-anim-soft-portrait.png",
+      "sourceSha256": "6E23524402F96321EB1BEF49DDFD3805AADACF44379CC87764340777A91334AE",
+      "sourceDimensions": [
+        1080,
+        1920
+      ],
+      "alphaPeak": 74,
+      "outputs": [
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_soft_portrait.webp",
+          "sha256": "B4D8446AD5F7411F72DA7F6FE9D1B2A215F2E1B9F401B7F18432E87B625ACF2E",
+          "bytes": 19524,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        },
+        {
+          "path": "public/assets/tidebound/environment/cinderholm_beam_soft_portrait.png",
+          "sha256": "6E23524402F96321EB1BEF49DDFD3805AADACF44379CC87764340777A91334AE",
+          "bytes": 31046,
+          "dimensions": [
+            1080,
+            1920
+          ]
+        }
+      ]
+    }
+  ],
+  "outputCount": 26,
+  "totalBytes": 6232430
+}

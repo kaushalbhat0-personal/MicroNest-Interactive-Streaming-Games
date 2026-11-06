@@ -1,0 +1,33 @@
+{
+  "name": "prod-storm-portrait",
+  "url": "http://localhost:5173/index.html?format=portrait&env=storm",
+  "screenshot": "prod-storm-portrait.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "portrait",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "storm",
+    "envMissing": [],
+    "vessel": {
+      "x": 822.2446518262325,
+      "y": 724.4845664327887,
+      "rotation": 0.008415797513322332
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 2.3333333333333335,
+    "heapMB": 23.365020751953125
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

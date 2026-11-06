@@ -1,0 +1,33 @@
+{
+  "name": "prod-storm-reduced",
+  "url": "http://localhost:5173/index.html?env=storm",
+  "screenshot": "prod-storm-reduced.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": true,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "storm",
+    "envMissing": [],
+    "vessel": {
+      "x": 1230,
+      "y": 800,
+      "rotation": 0
+    },
+    "tweens": 0,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 2,
+    "heapMB": 24.7955322265625
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

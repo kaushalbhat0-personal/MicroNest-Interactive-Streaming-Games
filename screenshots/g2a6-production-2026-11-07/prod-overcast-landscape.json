@@ -1,0 +1,33 @@
+{
+  "name": "prod-overcast-landscape",
+  "url": "http://localhost:5173/index.html?env=overcast",
+  "screenshot": "prod-overcast-landscape.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "overcast",
+    "envMissing": [],
+    "vessel": {
+      "x": 1231.718631316727,
+      "y": 802.3516006518472,
+      "rotation": 0.008575176560214004
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 1.3333333333333333,
+    "heapMB": 23.365020751953125
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

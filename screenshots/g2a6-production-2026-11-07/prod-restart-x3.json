@@ -1,0 +1,33 @@
+{
+  "name": "prod-restart-x3",
+  "url": "http://localhost:5173/index.html?env=storm",
+  "screenshot": "prod-restart-x3.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "storm",
+    "envMissing": [],
+    "vessel": {
+      "x": 1231.5480604168647,
+      "y": 800.4181075476502,
+      "rotation": 0.014128014894374985
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 1.3333333333333333,
+    "heapMB": 26.3214111328125
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

@@ -1,0 +1,33 @@
+{
+  "name": "prod-storm-landscape",
+  "url": "http://localhost:5173/index.html?env=storm",
+  "screenshot": "prod-storm-landscape.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": true,
+    "envActive": true,
+    "envPreset": "storm",
+    "envMissing": [],
+    "vessel": {
+      "x": 1232.2498881186932,
+      "y": 804.4302900176386,
+      "rotation": 0.00928330455833759
+    },
+    "tweens": 1,
+    "textures": {
+      "sky": true,
+      "sea": true,
+      "beam": true
+    }
+  },
+  "perf": {
+    "fps": 1.3333333333333333,
+    "heapMB": 24.7955322265625
+  },
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

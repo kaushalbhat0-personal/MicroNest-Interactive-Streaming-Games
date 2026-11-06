@@ -1,0 +1,293 @@
+{
+  "name": "prod-noenv-fallback",
+  "url": "http://localhost:5173/index.html?env=calm",
+  "screenshot": "prod-noenv-fallback.png",
+  "state": {
+    "game": true,
+    "active": true,
+    "format": "landscape",
+    "reduced": false,
+    "envReady": false,
+    "envActive": false,
+    "envPreset": "calm",
+    "envMissing": [
+      "env-sky:webp",
+      "env-mountains:webp",
+      "env-castle:webp",
+      "env-sea:webp",
+      "env-rocks:webp",
+      "env-sheen:webp",
+      "env-mist:webp",
+      "env-beam:webp",
+      "env-sky",
+      "env-mountains",
+      "env-castle",
+      "env-sea",
+      "env-rocks",
+      "env-sheen",
+      "env-mist",
+      "env-beam",
+      "env-sky"
+    ],
+    "vessel": {
+      "x": 1230,
+      "y": 800,
+      "rotation": 0
+    },
+    "tweens": 17,
+    "textures": {
+      "sky": false,
+      "sea": false,
+      "beam": false
+    }
+  },
+  "perf": {
+    "fps": 5.333333333333333,
+    "heapMB": 26.3214111328125
+  },
+  "consoleErrors": [
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED",
+    "Failed to load resource: net::ERR_FAILED"
+  ],
+  "failedRequests": [
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.webp",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sky.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mountains.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_castle.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sea.jpg",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_frontstones.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_sheen_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_mist_landscape.png",
+      "error": "net::ERR_FAILED"
+    },
+    {
+      "url": "http://localhost:5173/assets/tidebound/environment/cinderholm_beam_landscape.png",
+      "error": "net::ERR_FAILED"
+    }
+  ],
+  "httpErrors": []
+}
