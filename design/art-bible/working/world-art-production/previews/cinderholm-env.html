@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='6' fill='%23FFD166'/%3E%3C/svg%3E" />
+    <title>Tidebound G2-A4 Cinderholm Environment Assembly</title>
+    <style>
+      :root { color-scheme: dark; background: #0d0a1a; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-width: 100%; min-height: 100%; background: #0d0a1a; }
+      body { display: grid; place-items: center; }
+      #world { width: min(100vw, 1920px); height: auto; aspect-ratio: 16 / 9; overflow: hidden; }
+      html[data-format="portrait"] #world { width: min(100vw, calc(100vh * 0.5625)); aspect-ratio: 9 / 16; }
+      canvas { display: block; width: 100% !important; height: 100% !important; }
+      #env-label { position: fixed; z-index: 5; right: 10px; top: 10px; padding: 5px 9px; border: 1px solid #b9b3c755; border-radius: 12px; background: #0d0a1acc; color: #f4efe4; font: 12px/1.3 system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <div id="env-label">G2-A4 CINDERHOLM ASSEMBLY · EXPERIMENTAL · NO GAMEPLAY STATE</div>
+    <div id="world" aria-label="Tidebound Cinderholm environment assembly preview"></div>
+    <script>
+      const format = new URLSearchParams(location.search).get("format") === "portrait" ? "portrait" : "landscape";
+      document.documentElement.dataset.format = format;
+    </script>
+    <script type="module" src="./cinderholm-env.ts"></script>
+  </body>
+</html>

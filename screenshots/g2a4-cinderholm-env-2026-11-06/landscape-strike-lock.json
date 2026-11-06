@@ -1,0 +1,554 @@
+{
+  "name": "landscape-strike-lock",
+  "url": "http://localhost:5173/design/art-bible/working/world-art-production/previews/cinderholm-env.html?format=landscape&keeperPreview=strike",
+  "screenshot": "landscape-strike-lock.png",
+  "state": {
+    "format": "landscape",
+    "reduced": false,
+    "noAtlas": false,
+    "keeperPreview": "strike",
+    "keeper": {
+      "present": true,
+      "key": "keeper-strike",
+      "frame": "keeper_strike_side_00",
+      "playing": true,
+      "x": 641,
+      "y": 771
+    },
+    "vessel": {
+      "present": true,
+      "key": "vessel-idle-side",
+      "frame": "vessel_idle_side_00",
+      "playing": true,
+      "x": 1053,
+      "y": 785
+    },
+    "layers": {
+      "p1-sky": true,
+      "p1-mountains": true,
+      "p1-castle": true,
+      "p1-sea": true,
+      "p1-rocks": true
+    },
+    "loadErrors": [],
+    "tweens": 2
+  },
+  "trace": [
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 28.9
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 556.1
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 943.4
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 1382.2
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 1754.5
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 2074.1
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 2456.5
+    },
+    {
+      "format": "landscape",
+      "reduced": false,
+      "noAtlas": false,
+      "keeperPreview": "strike",
+      "keeper": {
+        "present": true,
+        "key": "keeper-strike",
+        "frame": "keeper_strike_side_00",
+        "playing": true,
+        "x": 641,
+        "y": 771
+      },
+      "vessel": {
+        "present": true,
+        "key": "vessel-idle-side",
+        "frame": "vessel_idle_side_00",
+        "playing": true,
+        "x": 1053,
+        "y": 785
+      },
+      "layers": {
+        "p1-sky": true,
+        "p1-mountains": true,
+        "p1-castle": true,
+        "p1-sea": true,
+        "p1-rocks": true
+      },
+      "loadErrors": [],
+      "tweens": 2,
+      "elapsedMs": 2795.9
+    }
+  ],
+  "frameEvents": [
+    {
+      "actor": "keeper",
+      "frame": "keeper_strike_side_01",
+      "atMs": 227
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_strike_side_02",
+      "atMs": 401
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 433
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_strike_side_03",
+      "atMs": 535
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 698
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 1097
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 1382
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 1666
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 1932
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 2226
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 2443
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 2735
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 2958
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 3201
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 3462
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 3705
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 3967
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 4204
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 4456
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 4728
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 4967
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 5200
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 5459
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 5684
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 5970
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 6222
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 6476
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 6721
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 6954
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 7206
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 7436
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 7720
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 8020
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 8220
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 8432
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 8698
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 8942
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 9180
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 9474
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 9697
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 9971
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 10198
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 10472
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 10727
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 10951
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 11219
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 11465
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 11698
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 11955
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 12226
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 12449
+    }
+  ],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

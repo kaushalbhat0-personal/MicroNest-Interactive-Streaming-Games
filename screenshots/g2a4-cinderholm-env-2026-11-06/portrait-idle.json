@@ -1,0 +1,307 @@
+{
+  "name": "portrait-idle",
+  "url": "http://localhost:5173/design/art-bible/working/world-art-production/previews/cinderholm-env.html?format=portrait",
+  "screenshot": "portrait-idle.png",
+  "state": {
+    "format": "portrait",
+    "reduced": false,
+    "noAtlas": false,
+    "keeperPreview": null,
+    "keeper": {
+      "present": true,
+      "key": "keeper-idle",
+      "frame": "keeper_idle_side_00",
+      "playing": true,
+      "x": 430,
+      "y": 1595
+    },
+    "vessel": {
+      "present": true,
+      "key": "vessel-idle-side",
+      "frame": "vessel_idle_side_00",
+      "playing": true,
+      "x": 705,
+      "y": 1346
+    },
+    "layers": {
+      "p1-sky": true,
+      "p1-mountains": true,
+      "p1-castle": true,
+      "p1-sea": true,
+      "p1-rocks": true
+    },
+    "loadErrors": [],
+    "tweens": 2
+  },
+  "trace": [],
+  "frameEvents": [
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 414
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 772
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_01",
+      "atMs": 1099
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 1099
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 1439
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 1760
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_02",
+      "atMs": 2107
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 2107
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 2450
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 2791
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_03",
+      "atMs": 2971
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 2971
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 3231
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 3488
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_00",
+      "atMs": 3719
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 3719
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 3954
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 4263
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_01",
+      "atMs": 4476
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 4476
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 4721
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 4951
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_02",
+      "atMs": 5229
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 5229
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 5465
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 5720
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_03",
+      "atMs": 6042
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 6042
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 6201
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 6487
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_00",
+      "atMs": 6761
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 6761
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 6972
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 7235
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_01",
+      "atMs": 7477
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 7477
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 7742
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 7972
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_02",
+      "atMs": 8219
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 8219
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 8471
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 8725
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_03",
+      "atMs": 8954
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 8954
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 9248
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 9484
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_00",
+      "atMs": 9724
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 9724
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_01",
+      "atMs": 9975
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_02",
+      "atMs": 10244
+    },
+    {
+      "actor": "keeper",
+      "frame": "keeper_idle_side_01",
+      "atMs": 10478
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_03",
+      "atMs": 10478
+    },
+    {
+      "actor": "vessel",
+      "frame": "vessel_idle_side_00",
+      "atMs": 10727
+    }
+  ],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

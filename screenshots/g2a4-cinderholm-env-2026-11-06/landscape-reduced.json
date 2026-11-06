@@ -1,0 +1,41 @@
+{
+  "name": "landscape-reduced",
+  "url": "http://localhost:5173/design/art-bible/working/world-art-production/previews/cinderholm-env.html?format=landscape&reduced=1",
+  "screenshot": "landscape-reduced.png",
+  "state": {
+    "format": "landscape",
+    "reduced": true,
+    "noAtlas": false,
+    "keeperPreview": null,
+    "keeper": {
+      "present": true,
+      "key": null,
+      "frame": "keeper_idle_side_00",
+      "playing": false,
+      "x": 641,
+      "y": 771
+    },
+    "vessel": {
+      "present": true,
+      "key": null,
+      "frame": "vessel_idle_side_00",
+      "playing": false,
+      "x": 1053,
+      "y": 785
+    },
+    "layers": {
+      "p1-sky": true,
+      "p1-mountains": true,
+      "p1-castle": true,
+      "p1-sea": true,
+      "p1-rocks": true
+    },
+    "loadErrors": [],
+    "tweens": 0
+  },
+  "trace": [],
+  "frameEvents": [],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}

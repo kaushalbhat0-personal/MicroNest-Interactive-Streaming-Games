@@ -1,0 +1,41 @@
+{
+  "name": "landscape-noatlas",
+  "url": "http://localhost:5173/design/art-bible/working/world-art-production/previews/cinderholm-env.html?format=landscape&noatlas=1",
+  "screenshot": "landscape-noatlas.png",
+  "state": {
+    "format": "landscape",
+    "reduced": false,
+    "noAtlas": true,
+    "keeperPreview": null,
+    "keeper": {
+      "present": false,
+      "key": null,
+      "frame": null,
+      "playing": false,
+      "x": null,
+      "y": null
+    },
+    "vessel": {
+      "present": false,
+      "key": null,
+      "frame": null,
+      "playing": false,
+      "x": null,
+      "y": null
+    },
+    "layers": {
+      "p1-sky": true,
+      "p1-mountains": true,
+      "p1-castle": true,
+      "p1-sea": true,
+      "p1-rocks": true
+    },
+    "loadErrors": [],
+    "tweens": 2
+  },
+  "trace": [],
+  "frameEvents": [],
+  "consoleErrors": [],
+  "failedRequests": [],
+  "httpErrors": []
+}
